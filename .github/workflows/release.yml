@@ -75,3 +75,64 @@ jobs:
         with:
           generate_release_notes: true
           files: artifacts/**/*.tar.gz
+
+      - name: Generate checksums
+        id: checksums
+        run: |
+          echo "macos_arm=$(shasum -a 256 artifacts/ghostid-macos-arm/ghostid-macos-arm.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "macos_intel=$(shasum -a 256 artifacts/ghostid-macos-intel/ghostid-macos-intel.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "linux_x86_64=$(shasum -a 256 artifacts/ghostid-linux-x86_64/ghostid-linux-x86_64.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "linux_arm64=$(shasum -a 256 artifacts/ghostid-linux-arm64/ghostid-linux-arm64.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Update Homebrew formula
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME}"
+
+          cat > /tmp/ghostid.rb <<FORMULA
+          class Ghostid < Formula
+            desc "Encrypt any folder on your drive. No account. No server. Your key, your data."
+            homepage "https://github.com/neuromance-admin/ghostid"
+            version "${VERSION}"
+            license "Apache-2.0"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/neuromance-admin/ghostid/releases/download/${TAG}/ghostid-macos-arm.tar.gz"
+                sha256 "${{ steps.checksums.outputs.macos_arm }}"
+              else
+                url "https://github.com/neuromance-admin/ghostid/releases/download/${TAG}/ghostid-macos-intel.tar.gz"
+                sha256 "${{ steps.checksums.outputs.macos_intel }}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/neuromance-admin/ghostid/releases/download/${TAG}/ghostid-linux-arm64.tar.gz"
+                sha256 "${{ steps.checksums.outputs.linux_arm64 }}"
+              else
+                url "https://github.com/neuromance-admin/ghostid/releases/download/${TAG}/ghostid-linux-x86_64.tar.gz"
+                sha256 "${{ steps.checksums.outputs.linux_x86_64 }}"
+              end
+            end
+
+            def install
+              bin.install "ghostid"
+            end
+
+            test do
+              assert_match "ghostid #{version}", shell_output("#{bin}/ghostid --version")
+            end
+          end
+          FORMULA
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' /tmp/ghostid.rb
+
+          gh api repos/neuromance-admin/homebrew-tap/contents/Formula/ghostid.rb \
+            --method PUT \
+            --field message="Update GhostID to ${TAG}" \
+            --field content="$(base64 -w0 /tmp/ghostid.rb)" \
+            --field sha="$(gh api repos/neuromance-admin/homebrew-tap/contents/Formula/ghostid.rb --jq '.sha')"
