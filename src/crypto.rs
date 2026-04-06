@@ -10,6 +10,22 @@ use zeroize::Zeroize;
 
 use crate::format::{ChitinHeader, FORMAT_VERSION};
 
+/// Minimum passphrase length — enforced at encryption time
+pub const MIN_PASSPHRASE_LENGTH: usize = 12;
+
+/// Validate passphrase strength. Only enforced on encryption, not decryption
+/// (an old vault encrypted with a short passphrase still needs to be openable).
+pub fn validate_passphrase(passphrase: &str) -> Result<(), String> {
+    if passphrase.len() < MIN_PASSPHRASE_LENGTH {
+        return Err(format!(
+            "Passphrase too short: {} characters (minimum {}). Longer is stronger — try a sentence you'll remember.",
+            passphrase.len(),
+            MIN_PASSPHRASE_LENGTH
+        ));
+    }
+    Ok(())
+}
+
 /// Derive a 256-bit key from a passphrase using Argon2id
 pub fn derive_key(passphrase: &str, salt: &[u8; 32]) -> Result<[u8; 32], String> {
     let params = Params::new(65536, 3, 1, Some(32)).map_err(|e| format!("Argon2 params: {e}"))?;
@@ -25,6 +41,7 @@ pub fn derive_key(passphrase: &str, salt: &[u8; 32]) -> Result<[u8; 32], String>
 
 /// Encrypt plaintext bytes. Returns the full .chitin file contents (header + ciphertext).
 pub fn encrypt(plaintext: &[u8], passphrase: &str, salt: &[u8; 32]) -> Result<Vec<u8>, String> {
+    validate_passphrase(passphrase)?;
     let mut key = derive_key(passphrase, salt)?;
 
     let cipher =
@@ -110,8 +127,8 @@ mod tests {
         let plaintext = b"secret content";
         let salt = generate_salt();
 
-        let encrypted = encrypt(plaintext, "correct-key", &salt).unwrap();
-        let result = decrypt(&encrypted, "wrong-key");
+        let encrypted = encrypt(plaintext, "correct-key-long-enough", &salt).unwrap();
+        let result = decrypt(&encrypted, "wrong-key-also-long");
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("wrong key"));
@@ -122,8 +139,8 @@ mod tests {
         let plaintext = b"";
         let salt = generate_salt();
 
-        let encrypted = encrypt(plaintext, "key", &salt).unwrap();
-        let decrypted = decrypt(&encrypted, "key").unwrap();
+        let encrypted = encrypt(plaintext, "long-enough-key!", &salt).unwrap();
+        let decrypted = decrypt(&encrypted, "long-enough-key!").unwrap();
         assert_eq!(decrypted, plaintext);
     }
 
@@ -132,8 +149,18 @@ mod tests {
         let plaintext = "halicon's café résumé — naïve coöperation 🍄".as_bytes();
         let salt = generate_salt();
 
-        let encrypted = encrypt(plaintext, "key", &salt).unwrap();
-        let decrypted = decrypt(&encrypted, "key").unwrap();
+        let encrypted = encrypt(plaintext, "long-enough-key!", &salt).unwrap();
+        let decrypted = decrypt(&encrypted, "long-enough-key!").unwrap();
         assert_eq!(decrypted, plaintext);
+    }
+
+    #[test]
+    fn short_passphrase_rejected() {
+        let plaintext = b"secret";
+        let salt = generate_salt();
+
+        let result = encrypt(plaintext, "short", &salt);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("too short"));
     }
 }
