@@ -20,8 +20,12 @@ enum Commands {
         source: PathBuf,
 
         /// Path for the encrypted output directory
-        #[arg(short, long)]
-        target: PathBuf,
+        #[arg(short, long, required_unless_present = "in_place")]
+        target: Option<PathBuf>,
+
+        /// Encrypt in place (verify round-trip, then replace original)
+        #[arg(long, conflicts_with = "target")]
+        in_place: bool,
 
         /// Encryption passphrase (omit to be prompted)
         #[arg(short, long)]
@@ -91,11 +95,18 @@ fn main() {
         Commands::Encrypt {
             source,
             target,
+            in_place,
             passphrase,
         } => {
             let pass = get_passphrase(passphrase);
-            eprintln!("Encrypting: {}", source.display());
-            ghostid::vault::encrypt_dir(&source, &target, &pass)
+            if in_place {
+                eprintln!("Encrypting in place: {}", source.display());
+                ghostid::vault::encrypt_in_place(&source, &pass)
+            } else {
+                let target = target.unwrap();
+                eprintln!("Encrypting: {}", source.display());
+                ghostid::vault::encrypt_dir(&source, &target, &pass)
+            }
         }
 
         Commands::Decrypt {

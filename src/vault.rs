@@ -154,6 +154,99 @@ pub fn decrypt_dir(
     Ok(())
 }
 
+/// Encrypt a directory in place: encrypt to temp, verify round-trip, then replace original
+pub fn encrypt_in_place(source_dir: &Path, passphrase: &str) -> Result<(), String> {
+    if !source_dir.is_dir() {
+        return Err(format!("Source is not a directory: {}", source_dir.display()));
+    }
+
+    // Step 1: Encrypt to a temp directory
+    let temp_encrypted = tempfile::Builder::new()
+        .prefix("ghostid-encrypt-")
+        .tempdir()
+        .map_err(|e| format!("Failed to create temp dir: {e}"))?;
+
+    eprintln!("  Encrypting to staging area...");
+    encrypt_dir(source_dir, temp_encrypted.path(), passphrase)?;
+
+    // Step 2: Verify round-trip by decrypting back to another temp dir
+    let temp_verify = tempfile::Builder::new()
+        .prefix("ghostid-verify-")
+        .tempdir()
+        .map_err(|e| format!("Failed to create verify dir: {e}"))?;
+
+    eprintln!("  Verifying round-trip...");
+    decrypt_dir(temp_encrypted.path(), temp_verify.path(), passphrase)?;
+
+    // Step 3: Compare every file against the original
+    let originals: Vec<_> = WalkDir::new(source_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .collect();
+
+    for entry in &originals {
+        let relative = entry
+            .path()
+            .strip_prefix(source_dir)
+            .map_err(|e| format!("Path strip failed: {e}"))?;
+        let verify_path = temp_verify.path().join(relative);
+
+        if !verify_path.exists() {
+            return Err(format!(
+                "Verification failed: {} missing after round-trip",
+                relative.display()
+            ));
+        }
+
+        let original = fs::read(entry.path())
+            .map_err(|e| format!("Failed to read original {}: {e}", relative.display()))?;
+        let recovered = fs::read(&verify_path)
+            .map_err(|e| format!("Failed to read verified {}: {e}", relative.display()))?;
+
+        if original != recovered {
+            return Err(format!(
+                "Verification failed: {} differs after round-trip. Original untouched.",
+                relative.display()
+            ));
+        }
+    }
+
+    eprintln!("  Verification passed. Replacing original...");
+
+    // Step 4: Remove original contents
+    for entry in fs::read_dir(source_dir)
+        .map_err(|e| format!("Failed to read source dir: {e}"))?
+    {
+        let entry = entry.map_err(|e| format!("Dir entry error: {e}"))?;
+        let path = entry.path();
+        if path.is_dir() {
+            fs::remove_dir_all(&path)
+                .map_err(|e| format!("Failed to remove {}: {e}", path.display()))?;
+        } else {
+            fs::remove_file(&path)
+                .map_err(|e| format!("Failed to remove {}: {e}", path.display()))?;
+        }
+    }
+
+    // Step 5: Move encrypted contents into the original directory
+    for entry in fs::read_dir(temp_encrypted.path())
+        .map_err(|e| format!("Failed to read encrypted dir: {e}"))?
+    {
+        let entry = entry.map_err(|e| format!("Dir entry error: {e}"))?;
+        let dest = source_dir.join(entry.file_name());
+        fs::rename(entry.path(), &dest)
+            .map_err(|e| format!("Failed to move {}: {e}", entry.file_name().to_string_lossy()))?;
+    }
+
+    eprintln!(
+        "  In-place encryption complete. {} is now encrypted.",
+        source_dir.display()
+    );
+
+    Ok(())
+}
+
 /// Unlock a directory to a temporary workspace (returns the temp dir path)
 pub fn unlock_dir(encrypted_dir: &Path, passphrase: &str) -> Result<PathBuf, String> {
     let temp_dir = tempfile::Builder::new()
