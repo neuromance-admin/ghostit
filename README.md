@@ -280,6 +280,21 @@ The format is open. The crypto is standard. Anyone can build a compatible decryp
 
 ---
 
+## Claude Code Integration
+
+GhostID works natively with [Claude Code](https://claude.ai/code). When you encrypt a folder, GhostID automatically creates a `CLAUDE.md` file with protocol instructions. When Claude Code opens that directory, it knows to:
+
+1. Detect the encrypted vault
+2. Ask for the passphrase
+3. Use `ghostid` commands for all file operations
+4. Never write plaintext to disk
+
+This is fully automatic. Encrypt a folder, open it in Claude Code, type your passphrase, and work normally. The AI reads and writes through the GhostID protocol — the folder stays encrypted on disk the entire time.
+
+When you decrypt the folder, the `CLAUDE.md` is automatically removed.
+
+---
+
 ## Product Architecture
 
 GhostID is designed to work at multiple levels:
@@ -287,6 +302,8 @@ GhostID is designed to work at multiple levels:
 **As a CLI tool** — encrypt any folder, decrypt it back. Simple, standalone, no dependencies.
 
 **As a file-level protocol** — list, read, write, and remove individual files inside an encrypted folder without ever decrypting it to disk. The folder stays encrypted at all times. Plaintext only exists in memory, in the moment you need it.
+
+**As a Claude Code encryption layer** — encrypt a folder and keep working in it through Claude Code. GhostID auto-generates the integration config. Zero setup, zero plaintext on disk.
 
 **As a Rust library** — GhostID exposes its crypto primitives as a crate. Other applications can import it directly for file-level encryption and decryption without shelling out to the CLI.
 
