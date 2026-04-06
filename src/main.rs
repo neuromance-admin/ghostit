@@ -3,8 +3,8 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "chitin")]
-#[command(about = "Encrypted document layer for Mycelium vaults")]
+#[command(name = "ghostid")]
+#[command(about = "Encrypt any folder on your drive. No account. No server. Your key, your data.")]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -13,9 +13,9 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Encrypt a plaintext vault into a Chitin encrypted vault
+    /// Encrypt a folder into a GhostID encrypted directory
     Encrypt {
-        /// Path to the plaintext vault directory
+        /// Path to the source folder
         #[arg(short, long)]
         source: PathBuf,
 
@@ -28,9 +28,9 @@ enum Commands {
         passphrase: Option<String>,
     },
 
-    /// Decrypt a Chitin vault back to plaintext
+    /// Decrypt a GhostID directory back to its original form
     Decrypt {
-        /// Path to the encrypted vault directory
+        /// Path to the encrypted directory
         #[arg(short, long)]
         source: PathBuf,
 
@@ -43,26 +43,26 @@ enum Commands {
         passphrase: Option<String>,
     },
 
-    /// Unlock a vault to a temporary workspace for a session
+    /// Unlock an encrypted directory to a temporary workspace
     Unlock {
-        /// Path to the encrypted vault directory
+        /// Path to the encrypted directory
         #[arg(short, long)]
-        vault: PathBuf,
+        dir: PathBuf,
 
         /// Decryption passphrase (omit to be prompted)
         #[arg(short, long)]
         passphrase: Option<String>,
     },
 
-    /// Re-encrypt a temporary workspace and clean up
+    /// Re-encrypt a temporary workspace and wipe the plaintext
     Lock {
         /// Path to the unlocked temporary workspace
         #[arg(short, long)]
         workspace: PathBuf,
 
-        /// Path to the encrypted vault directory to update
+        /// Path to the encrypted directory to update
         #[arg(short, long)]
-        vault: PathBuf,
+        dir: PathBuf,
 
         /// Encryption passphrase (omit to be prompted)
         #[arg(short, long)]
@@ -94,8 +94,8 @@ fn main() {
             passphrase,
         } => {
             let pass = get_passphrase(passphrase);
-            eprintln!("Encrypting vault: {}", source.display());
-            chitin::vault::encrypt_vault(&source, &target, &pass)
+            eprintln!("Encrypting: {}", source.display());
+            ghostid::vault::encrypt_dir(&source, &target, &pass)
         }
 
         Commands::Decrypt {
@@ -104,18 +104,18 @@ fn main() {
             passphrase,
         } => {
             let pass = get_passphrase(passphrase);
-            eprintln!("Decrypting vault: {}", source.display());
-            chitin::vault::decrypt_vault(&source, &target, &pass)
+            eprintln!("Decrypting: {}", source.display());
+            ghostid::vault::decrypt_dir(&source, &target, &pass)
         }
 
-        Commands::Unlock { vault, passphrase } => {
+        Commands::Unlock { dir, passphrase } => {
             let pass = get_passphrase(passphrase);
-            eprintln!("Unlocking vault: {}", vault.display());
-            match chitin::vault::unlock_vault(&vault, &pass) {
+            eprintln!("Unlocking: {}", dir.display());
+            match ghostid::vault::unlock_dir(&dir, &pass) {
                 Ok(temp_path) => {
                     println!("{}", temp_path.display());
-                    eprintln!("Vault unlocked. Workspace at: {}", temp_path.display());
-                    eprintln!("Run `chitin lock` when done to re-encrypt.");
+                    eprintln!("Unlocked. Workspace at: {}", temp_path.display());
+                    eprintln!("Run `ghostid lock` when done to re-encrypt.");
                     Ok(())
                 }
                 Err(e) => Err(e),
@@ -124,15 +124,14 @@ fn main() {
 
         Commands::Lock {
             workspace,
-            vault,
+            dir,
             passphrase,
         } => {
             let pass = get_passphrase(passphrase);
-            eprintln!("Re-encrypting workspace: {}", workspace.display());
-            let result = chitin::vault::encrypt_vault(&workspace, &vault, &pass);
+            eprintln!("Re-encrypting: {}", workspace.display());
+            let result = ghostid::vault::encrypt_dir(&workspace, &dir, &pass);
 
             if result.is_ok() {
-                // Wipe the plaintext workspace
                 if let Err(e) = std::fs::remove_dir_all(&workspace) {
                     eprintln!("Warning: failed to clean up workspace: {e}");
                 } else {

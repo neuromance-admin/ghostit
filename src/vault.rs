@@ -1,4 +1,4 @@
-//! Vault-level operations: encrypt, decrypt, lock, unlock
+//! Folder-level operations: encrypt, decrypt, lock, unlock
 
 use std::collections::HashMap;
 use std::fs;
@@ -12,7 +12,7 @@ use crate::crypto;
 /// Manifest: maps opaque filenames to original relative paths
 #[derive(serde::Serialize, serde::Deserialize, Debug)]
 pub struct Manifest {
-    pub vault_id: String,
+    pub source_id: String,
     pub version: u16,
     pub files: HashMap<String, String>, // opaque_name -> original_relative_path
 }
@@ -23,11 +23,11 @@ fn opaque_name(relative_path: &str, salt: &[u8; 32]) -> String {
     hasher.update(salt);
     hasher.update(relative_path.as_bytes());
     let hash = hasher.finalize();
-    format!("{}.chitin", hex::encode(&hash[..16]))
+    format!("{}.ghost", hex::encode(&hash[..16]))
 }
 
-/// Encrypt an entire vault directory into a target directory of .chitin blobs
-pub fn encrypt_vault(
+/// Encrypt an entire directory into a target directory of .ghost blobs
+pub fn encrypt_dir(
     source_dir: &Path,
     target_dir: &Path,
     passphrase: &str,
@@ -41,26 +41,10 @@ pub fn encrypt_vault(
 
     let salt = crypto::generate_salt();
     let mut manifest = Manifest {
-        vault_id: String::new(),
+        source_id: String::new(),
         version: 1,
         files: HashMap::new(),
     };
-
-    // Try to read vault ID from VaultIdentity
-    let identity_path = source_dir.join("System/VaultIdentity.md");
-    if identity_path.exists() {
-        let content = fs::read_to_string(&identity_path)
-            .map_err(|e| format!("Failed to read VaultIdentity: {e}"))?;
-        for line in content.lines() {
-            if line.starts_with("- **VMD ID:**") {
-                manifest.vault_id = line
-                    .trim_start_matches("- **VMD ID:**")
-                    .trim()
-                    .to_string();
-                break;
-            }
-        }
-    }
 
     // Walk and encrypt every file
     let entries: Vec<_> = WalkDir::new(source_dir)
@@ -99,11 +83,11 @@ pub fn encrypt_vault(
     let encrypted_manifest = crypto::encrypt(manifest_json.as_bytes(), passphrase, &salt)?;
 
     // Write salt file (needed to derive the same key for the manifest)
-    let salt_path = target_dir.join(".chitin-salt");
+    let salt_path = target_dir.join(".ghost-salt");
     fs::write(&salt_path, hex::encode(salt))
         .map_err(|e| format!("Failed to write salt: {e}"))?;
 
-    let manifest_path = target_dir.join(".chitin-manifest");
+    let manifest_path = target_dir.join(".ghost-manifest");
     fs::write(&manifest_path, encrypted_manifest)
         .map_err(|e| format!("Failed to write manifest: {e}"))?;
 
@@ -116,8 +100,8 @@ pub fn encrypt_vault(
     Ok(())
 }
 
-/// Decrypt an encrypted vault back to a target directory
-pub fn decrypt_vault(
+/// Decrypt an encrypted directory back to a target directory
+pub fn decrypt_dir(
     encrypted_dir: &Path,
     target_dir: &Path,
     passphrase: &str,
@@ -130,7 +114,7 @@ pub fn decrypt_vault(
     }
 
     // Read the manifest
-    let manifest_path = encrypted_dir.join(".chitin-manifest");
+    let manifest_path = encrypted_dir.join(".ghost-manifest");
     let manifest_data =
         fs::read(&manifest_path).map_err(|e| format!("Failed to read manifest: {e}"))?;
 
@@ -170,16 +154,16 @@ pub fn decrypt_vault(
     Ok(())
 }
 
-/// Unlock a vault to a temporary workspace (returns the temp dir path)
-pub fn unlock_vault(encrypted_dir: &Path, passphrase: &str) -> Result<PathBuf, String> {
+/// Unlock a directory to a temporary workspace (returns the temp dir path)
+pub fn unlock_dir(encrypted_dir: &Path, passphrase: &str) -> Result<PathBuf, String> {
     let temp_dir = tempfile::Builder::new()
-        .prefix("chitin-unlocked-")
+        .prefix("ghostid-unlocked-")
         .tempdir()
         .map_err(|e| format!("Failed to create temp dir: {e}"))?;
 
     let temp_path = temp_dir.keep(); // persist it (caller manages cleanup)
 
-    decrypt_vault(encrypted_dir, &temp_path, passphrase)?;
+    decrypt_dir(encrypted_dir, &temp_path, passphrase)?;
 
     Ok(temp_path)
 }
@@ -188,35 +172,34 @@ pub fn unlock_vault(encrypted_dir: &Path, passphrase: &str) -> Result<PathBuf, S
 mod tests {
     use super::*;
 
-    const TEST_PASSPHRASE: &str = "chitin-test-key-2026";
+    const TEST_PASSPHRASE: &str = "ghostid-test-key-2026";
 
-    /// Helper: decrypt the shipped encrypted test vault to a temp dir
-    fn decrypt_test_vault() -> (tempfile::TempDir, PathBuf) {
+    /// Helper: decrypt the shipped encrypted test data to a temp dir
+    fn decrypt_test_data() -> (tempfile::TempDir, PathBuf) {
         let encrypted = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/encrypted");
         let temp = tempfile::tempdir().unwrap();
-        decrypt_vault(&encrypted, temp.path(), TEST_PASSPHRASE).unwrap();
+        decrypt_dir(&encrypted, temp.path(), TEST_PASSPHRASE).unwrap();
         let path = temp.path().to_path_buf();
         (temp, path)
     }
 
     #[test]
     fn decrypt_and_re_encrypt_round_trip() {
-        // Decrypt the shipped encrypted vault
-        let (_temp_plain, plaintext_path) = decrypt_test_vault();
+        let (_temp_plain, plaintext_path) = decrypt_test_data();
 
-        // Re-encrypt it
+        // Re-encrypt into GhostID format
         let temp_re_encrypted = tempfile::tempdir().unwrap();
-        encrypt_vault(&plaintext_path, temp_re_encrypted.path(), TEST_PASSPHRASE).unwrap();
+        encrypt_dir(&plaintext_path, temp_re_encrypted.path(), TEST_PASSPHRASE).unwrap();
 
-        // Verify re-encrypted files have CHTN magic
-        let manifest_path = temp_re_encrypted.path().join(".chitin-manifest");
+        // Verify re-encrypted files have GHST magic
+        let manifest_path = temp_re_encrypted.path().join(".ghost-manifest");
         assert!(manifest_path.exists());
         let manifest_bytes = fs::read(&manifest_path).unwrap();
-        assert_eq!(&manifest_bytes[0..4], b"CHTN");
+        assert_eq!(&manifest_bytes[0..4], b"GHST");
 
-        // Decrypt the re-encrypted vault
+        // Decrypt the re-encrypted data
         let temp_final = tempfile::tempdir().unwrap();
-        decrypt_vault(temp_re_encrypted.path(), temp_final.path(), TEST_PASSPHRASE).unwrap();
+        decrypt_dir(temp_re_encrypted.path(), temp_final.path(), TEST_PASSPHRASE).unwrap();
 
         // Compare against the first decryption — should be identical
         for entry in WalkDir::new(&plaintext_path)
@@ -236,19 +219,18 @@ mod tests {
     }
 
     #[test]
-    fn wrong_passphrase_fails_vault() {
+    fn wrong_passphrase_fails() {
         let encrypted = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/encrypted");
         let temp_decrypted = tempfile::tempdir().unwrap();
 
-        let result = decrypt_vault(&encrypted, temp_decrypted.path(), "wrong-key");
+        let result = decrypt_dir(&encrypted, temp_decrypted.path(), "wrong-key");
         assert!(result.is_err());
     }
 
     #[test]
-    fn decrypted_vault_has_expected_structure() {
-        let (_temp, plaintext_path) = decrypt_test_vault();
+    fn decrypted_data_has_expected_structure() {
+        let (_temp, plaintext_path) = decrypt_test_data();
 
-        // Verify expected files exist after decryption
         assert!(plaintext_path.join("System/VaultIdentity.md").exists());
         assert!(plaintext_path.join("System/VMD-Index.json").exists());
         assert!(plaintext_path.join("Projects/TestProject.md").exists());
@@ -260,16 +242,14 @@ mod tests {
     fn encrypted_files_are_not_plaintext() {
         let encrypted = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/encrypted");
 
-        // Every .chitin file should start with CHTN magic
         for entry in WalkDir::new(&encrypted)
             .into_iter()
             .filter_map(|e| e.ok())
-            .filter(|e| e.path().extension().map_or(false, |ext| ext == "chitin"))
+            .filter(|e| e.path().extension().map_or(false, |ext| ext == "ghost"))
         {
             let bytes = fs::read(entry.path()).unwrap();
-            assert_eq!(&bytes[0..4], b"CHTN", "Missing magic in {}", entry.path().display());
+            assert_eq!(&bytes[0..4], b"GHST", "Missing magic in {}", entry.path().display());
 
-            // Content after header should not contain readable markdown
             let after_header = &bytes[crate::format::HEADER_SIZE..];
             let as_text = String::from_utf8_lossy(after_header);
             assert!(!as_text.contains("# "), "Plaintext leaked in {}", entry.path().display());

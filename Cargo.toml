@@ -1,12 +1,12 @@
 [package]
-name = "chitin"
+name = "ghostid"
 version = "0.1.0"
 edition = "2021"
-description = "Encrypted document layer for Mycelium vaults"
+description = "Encrypt any folder on your drive. No account. No server. Your key, your data."
 license = "MIT"
 
 [[bin]]
-name = "chitin"
+name = "ghostid"
 path = "src/main.rs"
 
 [dependencies]

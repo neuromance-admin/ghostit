@@ -8,13 +8,13 @@ use chacha20poly1305::{
 use rand::RngCore;
 use zeroize::Zeroize;
 
-use crate::format::{ChitinHeader, FORMAT_VERSION};
+use crate::format::{GhostHeader, FORMAT_VERSION};
 
 /// Minimum passphrase length — enforced at encryption time
 pub const MIN_PASSPHRASE_LENGTH: usize = 12;
 
 /// Validate passphrase strength. Only enforced on encryption, not decryption
-/// (an old vault encrypted with a short passphrase still needs to be openable).
+/// (an old folder encrypted with a short passphrase still needs to be openable).
 pub fn validate_passphrase(passphrase: &str) -> Result<(), String> {
     if passphrase.len() < MIN_PASSPHRASE_LENGTH {
         return Err(format!(
@@ -39,7 +39,7 @@ pub fn derive_key(passphrase: &str, salt: &[u8; 32]) -> Result<[u8; 32], String>
     Ok(key)
 }
 
-/// Encrypt plaintext bytes. Returns the full .chitin file contents (header + ciphertext).
+/// Encrypt plaintext bytes. Returns the full .ghost file contents (header + ciphertext).
 pub fn encrypt(plaintext: &[u8], passphrase: &str, salt: &[u8; 32]) -> Result<Vec<u8>, String> {
     validate_passphrase(passphrase)?;
     let mut key = derive_key(passphrase, salt)?;
@@ -57,7 +57,7 @@ pub fn encrypt(plaintext: &[u8], passphrase: &str, salt: &[u8; 32]) -> Result<Ve
         .map_err(|e| format!("Encryption failed: {e}"))?;
 
     // Build file
-    let header = ChitinHeader {
+    let header = GhostHeader {
         version: FORMAT_VERSION,
         salt: *salt,
         nonce: nonce_bytes,
@@ -72,9 +72,9 @@ pub fn encrypt(plaintext: &[u8], passphrase: &str, salt: &[u8; 32]) -> Result<Ve
     Ok(output)
 }
 
-/// Decrypt a .chitin file's contents. Returns the original plaintext.
+/// Decrypt a .ghost file's contents. Returns the original plaintext.
 pub fn decrypt(file_data: &[u8], passphrase: &str) -> Result<Vec<u8>, String> {
-    let header = ChitinHeader::from_bytes(file_data)?;
+    let header = GhostHeader::from_bytes(file_data)?;
     let ciphertext = &file_data[crate::format::HEADER_SIZE..];
 
     let mut key = derive_key(passphrase, &header.salt)?;
@@ -93,7 +93,7 @@ pub fn decrypt(file_data: &[u8], passphrase: &str) -> Result<Vec<u8>, String> {
     Ok(plaintext)
 }
 
-/// Generate a random 32-byte salt for a vault
+/// Generate a random 32-byte salt
 pub fn generate_salt() -> [u8; 32] {
     let mut salt = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut salt);
@@ -106,17 +106,14 @@ mod tests {
 
     #[test]
     fn round_trip() {
-        let plaintext = b"---\nvmdId: TEST-001\n---\n\n# Hello Chitin\n\nThis is a test node.";
+        let plaintext = b"---\nvmdId: TEST-001\n---\n\n# Hello GhostID\n\nThis is a test.";
         let passphrase = "test-passphrase-123";
         let salt = generate_salt();
 
         let encrypted = encrypt(plaintext, passphrase, &salt).unwrap();
 
-        // Encrypted should be larger (header + auth tag overhead)
         assert!(encrypted.len() > plaintext.len());
-
-        // Should start with magic bytes
-        assert_eq!(&encrypted[0..4], b"CHTN");
+        assert_eq!(&encrypted[0..4], b"GHST");
 
         let decrypted = decrypt(&encrypted, passphrase).unwrap();
         assert_eq!(decrypted, plaintext);
