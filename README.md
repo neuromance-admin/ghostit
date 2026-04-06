@@ -336,7 +336,7 @@ GhostID integrates with [Claude Code](https://claude.ai/code) in two ways:
 
 ### Automatic (CLAUDE.md)
 
-When you encrypt a folder, GhostID automatically creates a `CLAUDE.md` file with protocol instructions. When Claude Code opens that directory, it detects the encrypted vault, asks for your passphrase, and uses `ghostid` CLI commands for all file operations. Zero setup.
+When you encrypt a folder, GhostID automatically creates a `CLAUDE.md` file with protocol instructions. When Claude Code opens that directory, it detects the encrypted vault, asks for your passphrase, and uses `ghostid` CLI commands for all file operations. Zero setup. The AI is instructed to always ask the user to confirm their passphrase before any encrypt operation — it will never encrypt on a single entry.
 
 When you decrypt the folder, the `CLAUDE.md` is automatically removed.
 

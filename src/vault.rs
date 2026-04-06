@@ -75,6 +75,7 @@ The server prompts for the passphrase on startup and holds it for the session. T
 - Plaintext only exists in memory, in conversation context. Never on the filesystem.
 - If the passphrase is wrong, stop and ask again. Do not attempt to brute-force.
 - The vault on disk must look encrypted at all times.
+- Before any encrypt operation, ALWAYS ask the user to confirm their passphrase by entering it a second time. Never encrypt on a single passphrase entry.
 "#;
 
 /// Write CLAUDE.md into the target directory for Claude Code integration
