@@ -3,7 +3,7 @@
 > Encrypt any folder on your drive. No account. No server. Your key, your data.
 
 **Version:** 0.1.0
-**License:** MIT
+**License:** Apache 2.0
 
 ---
 
@@ -300,7 +300,6 @@ GhostID protects against:
 - **No incremental writes** — locking re-encrypts the entire folder, not just changed files
 - **No rekey** — can't change the passphrase without a full decrypt/re-encrypt cycle
 - **No progress bar** — large folders show file-by-file output but no percentage
-- **No passphrase confirmation** — encrypt doesn't ask you to type it twice (yet)
 - **Passphrase input is visible** — the prompt doesn't mask input (terminal limitation in current implementation)
 
 ---
