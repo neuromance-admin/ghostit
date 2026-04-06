@@ -26,6 +26,59 @@ fn opaque_name(relative_path: &str, salt: &[u8; 32]) -> String {
     format!("{}.ghost", hex::encode(&hash[..16]))
 }
 
+/// The CLAUDE.md content that enables Claude Code to work with encrypted vaults
+const CLAUDE_MD: &str = r#"# GhostID Encrypted Vault
+
+This directory is encrypted with GhostID. All files except this one are `.ghost` blobs.
+
+## Boot Sequence
+
+1. Check for `.ghost-manifest` in this directory. If it exists, this vault is GhostID-encrypted.
+2. Ask the owner for the passphrase.
+3. Use `ghostid` CLI commands for ALL file operations — never use normal file reads or writes.
+4. Load the runtime or root file: `ghostid read --dir <this directory> --file "<filename>" -p <passphrase>`
+5. Use `ghostid list` to see what files exist.
+6. Use `ghostid read` to read any file (outputs to stdout, nothing written to disk).
+7. Use `ghostid write` to create or update files (pipe content via stdin).
+8. Use `ghostid remove` to delete files.
+9. Hold the passphrase in conversation memory for the session. Pass it via `-p` to every command.
+
+## Command Reference
+
+```
+ghostid list --dir <DIR> -p <PASSPHRASE>
+ghostid read --dir <DIR> --file <PATH> -p <PASSPHRASE>
+echo "<CONTENT>" | ghostid write --dir <DIR> --file <PATH> -p <PASSPHRASE>
+ghostid remove --dir <DIR> --file <PATH> -p <PASSPHRASE>
+```
+
+## Rules
+
+- Never decrypt the vault to disk. All reads and writes go through the GhostID protocol.
+- Plaintext only exists in memory, in conversation context. Never on the filesystem.
+- If the passphrase is wrong, stop and ask again. Do not attempt to brute-force.
+- The vault on disk must look encrypted at all times.
+"#;
+
+/// Write CLAUDE.md into the target directory for Claude Code integration
+fn write_claude_md(target_dir: &Path) -> Result<(), String> {
+    let claude_path = target_dir.join("CLAUDE.md");
+    if claude_path.exists() {
+        // Append to existing CLAUDE.md if it doesn't already have GhostID instructions
+        let existing = fs::read_to_string(&claude_path)
+            .map_err(|e| format!("Failed to read CLAUDE.md: {e}"))?;
+        if !existing.contains("GhostID Encrypted Vault") {
+            let updated = format!("{}\n\n---\n\n{}", existing.trim(), CLAUDE_MD);
+            fs::write(&claude_path, updated)
+                .map_err(|e| format!("Failed to update CLAUDE.md: {e}"))?;
+        }
+    } else {
+        fs::write(&claude_path, CLAUDE_MD)
+            .map_err(|e| format!("Failed to write CLAUDE.md: {e}"))?;
+    }
+    Ok(())
+}
+
 /// Encrypt an entire directory into a target directory of .ghost blobs
 pub fn encrypt_dir(
     source_dir: &Path,
@@ -46,11 +99,16 @@ pub fn encrypt_dir(
         files: HashMap::new(),
     };
 
-    // Walk and encrypt every file
+    // Walk and encrypt every file (skip GhostID metadata and CLAUDE.md)
     let entries: Vec<_> = WalkDir::new(source_dir)
         .into_iter()
         .filter_map(|e| e.ok())
         .filter(|e| e.file_type().is_file())
+        .filter(|e| {
+            let name = e.file_name().to_string_lossy();
+            name != ".ghost-manifest" && name != ".ghost-salt" && name != "CLAUDE.md"
+                && !name.ends_with(".ghost")
+        })
         .collect();
 
     let total = entries.len();
@@ -90,6 +148,9 @@ pub fn encrypt_dir(
     let manifest_path = target_dir.join(".ghost-manifest");
     fs::write(&manifest_path, encrypted_manifest)
         .map_err(|e| format!("Failed to write manifest: {e}"))?;
+
+    // Write CLAUDE.md for Claude Code integration
+    write_claude_md(target_dir)?;
 
     eprintln!(
         "  Encrypted {} files into {}",
@@ -349,6 +410,22 @@ pub fn decrypt_in_place(encrypted_dir: &Path, passphrase: &str) -> Result<(), St
                     entry.file_name().to_string_lossy()
                 )
             })?;
+        }
+    }
+
+    // Remove GhostID CLAUDE.md — no longer needed in plaintext mode
+    let claude_path = encrypted_dir.join("CLAUDE.md");
+    if claude_path.exists() {
+        let content = fs::read_to_string(&claude_path).unwrap_or_default();
+        if content.contains("GhostID Encrypted Vault") && !content.contains("\n\n---\n\n# GhostID") {
+            // CLAUDE.md was created by GhostID — remove it entirely
+            let _ = fs::remove_file(&claude_path);
+        } else if content.contains("GhostID Encrypted Vault") {
+            // GhostID section was appended — strip it
+            if let Some(pos) = content.find("\n\n---\n\n# GhostID Encrypted Vault") {
+                let cleaned = content[..pos].to_string();
+                let _ = fs::write(&claude_path, cleaned);
+            }
         }
     }
 
