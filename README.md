@@ -10,6 +10,8 @@ GhostID turns any folder into an unreadable collection of encrypted blobs. No fi
 
 If you lose the passphrase, the data is gone. There is no recovery, no backdoor, no server to contact. That's the design.
 
+GhostID is also an encryption protocol. AI coding assistants like Claude Code can work inside encrypted folders through GhostID — reading, writing, and managing files without ever decrypting them to disk. The folder stays encrypted at all times, even during an active session.
+
 ---
 
 ## Install
@@ -83,15 +85,16 @@ my-folder/
   f19e4a827c3d6b0195ea8d42f7c130ab.ghost
   .ghost-manifest
   .ghost-salt
+  CLAUDE.md
 ```
 
-No filenames. No folder structure. No way to tell what's inside or how many files there are.
+No filenames. No folder structure. No way to tell what's inside or how many files there are. `CLAUDE.md` is the only plaintext file — it contains protocol instructions for AI assistants, not your data.
 
 ---
 
 ## Commands
 
-GhostID has two layers of commands: **folder-level** operations for encrypting and decrypting entire directories, and **file-level** operations for working inside an encrypted folder without ever decrypting it to disk.
+GhostID has three layers: **folder-level** operations, **file-level** protocol commands, and an **MCP server** for native AI integration.
 
 ### Folder-Level Commands
 
@@ -109,6 +112,8 @@ ghostid encrypt --source <FOLDER> --in-place
 
 In-place mode is safe. GhostID encrypts to a staging area, decrypts it back, compares every file byte-for-byte against the original, and only replaces the folder if verification passes. If anything fails, your original is untouched.
 
+Encrypting automatically creates a `CLAUDE.md` with protocol instructions for AI assistants.
+
 #### `ghostid decrypt`
 
 Decrypt an encrypted folder.
@@ -121,7 +126,7 @@ ghostid decrypt --source <ENCRYPTED> --target <OUTPUT>
 ghostid decrypt --source <ENCRYPTED> --in-place
 ```
 
-Same round-trip verification as encrypt. Your escape hatch — no lock-in, open format.
+Same round-trip verification as encrypt. Your escape hatch — no lock-in, open format. Decrypting in place automatically removes the GhostID `CLAUDE.md`.
 
 #### `ghostid unlock`
 
@@ -191,13 +196,57 @@ ghostid remove --dir ~/my-encrypted-folder --file "Notes/old-note.md"
 
 ---
 
+### MCP Server
+
+GhostID ships as an MCP (Model Context Protocol) server for native integration with AI coding assistants like Claude Code and Claude Desktop.
+
+#### `ghostid serve`
+
+Start the MCP server for an encrypted directory.
+
+```
+ghostid serve --dir <ENCRYPTED>
+Passphrase: ********
+GhostID MCP server running.
+```
+
+The server prompts for the passphrase once at startup, holds it in memory, and exposes four MCP tools:
+
+| Tool | Description |
+|---|---|
+| `ghostid_list` | List all files in the vault |
+| `ghostid_read` | Read a file — decrypted in memory, never written to disk |
+| `ghostid_write` | Write a file — encrypted before hitting disk |
+| `ghostid_remove` | Remove a file and update the manifest |
+
+The AI uses these as native tools. The passphrase never appears in the conversation. The vault stays encrypted on disk the entire time.
+
+#### Claude Code Setup
+
+Add this to your Claude Code MCP settings (`~/.claude/settings.json` or project `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "ghostid": {
+      "command": "ghostid",
+      "args": ["serve", "--dir", "/absolute/path/to/encrypted/folder"]
+    }
+  }
+}
+```
+
+That's it. Claude Code launches the GhostID server, prompts for your passphrase, and works inside the encrypted folder natively. No `CLAUDE.md` instructions needed — the MCP tools handle everything.
+
+---
+
 ### Why This Matters
 
 With folder-level commands, you have to decrypt everything to work and re-encrypt when you're done. There's a window where your data is exposed.
 
-With file-level commands, that window is zero. The folder on disk is always encrypted. You list, read, write, and remove files through the protocol — plaintext only ever exists in memory, in the moment you need it.
+With file-level commands and the MCP server, that window is zero. The folder on disk is always encrypted. You list, read, write, and remove files through the protocol — plaintext only ever exists in memory, in the moment you need it.
 
-This is what makes GhostID an encryption protocol, not just an encryption tool.
+No other encryption tool provides this. GhostID is the first encryption protocol that AI can run inside.
 
 ---
 
@@ -244,6 +293,7 @@ The format is open. The crypto is standard. Anyone can build a compatible decryp
 |---|---|---|
 | `.ghost-manifest` | Maps hashed filenames to original paths | Yes |
 | `.ghost-salt` | Salt for key derivation | No (required to derive the key) |
+| `CLAUDE.md` | Protocol instructions for AI assistants | No (contains no user data) |
 
 ---
 
@@ -282,16 +332,30 @@ The format is open. The crypto is standard. Anyone can build a compatible decryp
 
 ## Claude Code Integration
 
-GhostID works natively with [Claude Code](https://claude.ai/code). When you encrypt a folder, GhostID automatically creates a `CLAUDE.md` file with protocol instructions. When Claude Code opens that directory, it knows to:
+GhostID integrates with [Claude Code](https://claude.ai/code) in two ways:
 
-1. Detect the encrypted vault
-2. Ask for the passphrase
-3. Use `ghostid` commands for all file operations
-4. Never write plaintext to disk
+### Automatic (CLAUDE.md)
 
-This is fully automatic. Encrypt a folder, open it in Claude Code, type your passphrase, and work normally. The AI reads and writes through the GhostID protocol — the folder stays encrypted on disk the entire time.
+When you encrypt a folder, GhostID automatically creates a `CLAUDE.md` file with protocol instructions. When Claude Code opens that directory, it detects the encrypted vault, asks for your passphrase, and uses `ghostid` CLI commands for all file operations. Zero setup.
 
 When you decrypt the folder, the `CLAUDE.md` is automatically removed.
+
+### Native (MCP Server)
+
+For a deeper integration, run GhostID as an MCP server. The AI gets native tools instead of CLI commands, and the passphrase stays in the server process — never in the conversation.
+
+```json
+{
+  "mcpServers": {
+    "ghostid": {
+      "command": "ghostid",
+      "args": ["serve", "--dir", "/path/to/encrypted/folder"]
+    }
+  }
+}
+```
+
+Both approaches keep the folder encrypted on disk at all times. The MCP server is recommended for regular use — it's cleaner and more secure.
 
 ---
 
@@ -301,7 +365,9 @@ GhostID is designed to work at multiple levels:
 
 **As a CLI tool** — encrypt any folder, decrypt it back. Simple, standalone, no dependencies.
 
-**As a file-level protocol** — list, read, write, and remove individual files inside an encrypted folder without ever decrypting it to disk. The folder stays encrypted at all times. Plaintext only exists in memory, in the moment you need it.
+**As a file-level protocol** — list, read, write, and remove individual files inside an encrypted folder without ever decrypting it to disk. The folder stays encrypted at all times.
+
+**As an MCP server** — native integration with AI coding assistants. The AI uses encryption-aware tools directly. Passphrase never enters the conversation.
 
 **As a Claude Code encryption layer** — encrypt a folder and keep working in it through Claude Code. GhostID auto-generates the integration config. Zero setup, zero plaintext on disk.
 
