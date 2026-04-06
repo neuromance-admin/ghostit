@@ -51,6 +51,62 @@ enum Commands {
         passphrase: Option<String>,
     },
 
+    /// List all files in an encrypted directory
+    List {
+        /// Path to the encrypted directory
+        #[arg(short, long)]
+        dir: PathBuf,
+
+        /// Decryption passphrase (omit to be prompted)
+        #[arg(short, long)]
+        passphrase: Option<String>,
+    },
+
+    /// Read a single file from an encrypted directory (outputs to stdout)
+    Read {
+        /// Path to the encrypted directory
+        #[arg(short, long)]
+        dir: PathBuf,
+
+        /// Relative path of the file to read (e.g. "Sessions/2026-04-06.md")
+        #[arg(short, long)]
+        file: String,
+
+        /// Decryption passphrase (omit to be prompted)
+        #[arg(short, long)]
+        passphrase: Option<String>,
+    },
+
+    /// Write a file to an encrypted directory (reads content from stdin)
+    Write {
+        /// Path to the encrypted directory
+        #[arg(short, long)]
+        dir: PathBuf,
+
+        /// Relative path for the file (e.g. "Sessions/2026-04-06b.md")
+        #[arg(short, long)]
+        file: String,
+
+        /// Encryption passphrase (omit to be prompted)
+        #[arg(short, long)]
+        passphrase: Option<String>,
+    },
+
+    /// Remove a file from an encrypted directory
+    Remove {
+        /// Path to the encrypted directory
+        #[arg(short, long)]
+        dir: PathBuf,
+
+        /// Relative path of the file to remove
+        #[arg(short, long)]
+        file: String,
+
+        /// Decryption passphrase (omit to be prompted)
+        #[arg(short, long)]
+        passphrase: Option<String>,
+    },
+
     /// Unlock an encrypted directory to a temporary workspace
     Unlock {
         /// Path to the encrypted directory
@@ -160,6 +216,56 @@ fn run() -> Result<(), String> {
                 eprintln!("Decrypting: {}", source.display());
                 ghostid::vault::decrypt_dir(&source, &target, &pass)
             }
+        }
+
+        Commands::List { dir, passphrase } => {
+            let pass = get_passphrase(passphrase);
+            let files = ghostid::vault::list_files(&dir, &pass)?;
+            for f in &files {
+                println!("{}", f);
+            }
+            Ok(())
+        }
+
+        Commands::Read {
+            dir,
+            file,
+            passphrase,
+        } => {
+            let pass = get_passphrase(passphrase);
+            let content = ghostid::vault::read_file(&dir, &file, &pass)?;
+            use std::io::Write;
+            std::io::stdout()
+                .write_all(&content)
+                .map_err(|e| format!("Failed to write to stdout: {e}"))?;
+            Ok(())
+        }
+
+        Commands::Write {
+            dir,
+            file,
+            passphrase,
+        } => {
+            let pass = get_passphrase(passphrase);
+            let mut content = Vec::new();
+            use std::io::Read;
+            std::io::stdin()
+                .read_to_end(&mut content)
+                .map_err(|e| format!("Failed to read from stdin: {e}"))?;
+            ghostid::vault::write_file(&dir, &file, &content, &pass)?;
+            eprintln!("  Written: {}", file);
+            Ok(())
+        }
+
+        Commands::Remove {
+            dir,
+            file,
+            passphrase,
+        } => {
+            let pass = get_passphrase(passphrase);
+            ghostid::vault::remove_file(&dir, &file, &pass)?;
+            eprintln!("  Removed: {}", file);
+            Ok(())
         }
 
         Commands::Unlock { dir, passphrase } => {

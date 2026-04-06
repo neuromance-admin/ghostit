@@ -383,6 +383,120 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Load the salt from an encrypted directory
+fn load_salt(encrypted_dir: &Path) -> Result<[u8; 32], String> {
+    let salt_path = encrypted_dir.join(".ghost-salt");
+    let salt_hex = fs::read_to_string(&salt_path)
+        .map_err(|e| format!("Failed to read salt: {e}"))?;
+    let salt_bytes = hex::decode(salt_hex.trim())
+        .map_err(|e| format!("Invalid salt hex: {e}"))?;
+    let mut salt = [0u8; 32];
+    if salt_bytes.len() != 32 {
+        return Err(format!("Salt is {} bytes, expected 32", salt_bytes.len()));
+    }
+    salt.copy_from_slice(&salt_bytes);
+    Ok(salt)
+}
+
+/// Load and decrypt the manifest from an encrypted directory
+fn load_manifest(encrypted_dir: &Path, passphrase: &str) -> Result<Manifest, String> {
+    let manifest_path = encrypted_dir.join(".ghost-manifest");
+    let manifest_data = fs::read(&manifest_path)
+        .map_err(|e| format!("Failed to read manifest: {e}"))?;
+    let manifest_json = crypto::decrypt(&manifest_data, passphrase)?;
+    let manifest: Manifest = serde_json::from_slice(&manifest_json)
+        .map_err(|e| format!("Manifest parse failed: {e}"))?;
+    Ok(manifest)
+}
+
+/// Save an updated manifest to an encrypted directory
+fn save_manifest(encrypted_dir: &Path, manifest: &Manifest, passphrase: &str, salt: &[u8; 32]) -> Result<(), String> {
+    let manifest_json = serde_json::to_string_pretty(manifest)
+        .map_err(|e| format!("Manifest serialize: {e}"))?;
+    let encrypted_manifest = crypto::encrypt(manifest_json.as_bytes(), passphrase, salt)?;
+    let manifest_path = encrypted_dir.join(".ghost-manifest");
+    fs::write(&manifest_path, encrypted_manifest)
+        .map_err(|e| format!("Failed to write manifest: {e}"))?;
+    Ok(())
+}
+
+/// List all files in an encrypted directory (decrypts manifest only)
+pub fn list_files(encrypted_dir: &Path, passphrase: &str) -> Result<Vec<String>, String> {
+    let manifest = load_manifest(encrypted_dir, passphrase)?;
+    let mut paths: Vec<String> = manifest.files.values().cloned().collect();
+    paths.sort();
+    Ok(paths)
+}
+
+/// Read a single file from an encrypted directory (decrypts in memory, returns content)
+pub fn read_file(encrypted_dir: &Path, file_path: &str, passphrase: &str) -> Result<Vec<u8>, String> {
+    let manifest = load_manifest(encrypted_dir, passphrase)?;
+    let salt = load_salt(encrypted_dir)?;
+
+    // Find the opaque name for this file
+    let opaque = opaque_name(file_path, &salt);
+
+    // Verify it exists in the manifest
+    if !manifest.files.contains_key(&opaque) {
+        return Err(format!("File not found in vault: {}", file_path));
+    }
+
+    // Read and decrypt
+    let encrypted_path = encrypted_dir.join(&opaque);
+    let file_data = fs::read(&encrypted_path)
+        .map_err(|e| format!("Failed to read {}: {e}", opaque))?;
+    let plaintext = crypto::decrypt(&file_data, passphrase)?;
+
+    Ok(plaintext)
+}
+
+/// Write a single file to an encrypted directory (encrypts content, updates manifest)
+pub fn write_file(encrypted_dir: &Path, file_path: &str, content: &[u8], passphrase: &str) -> Result<(), String> {
+    let mut manifest = load_manifest(encrypted_dir, passphrase)?;
+    let salt = load_salt(encrypted_dir)?;
+
+    let opaque = opaque_name(file_path, &salt);
+
+    // Encrypt the content
+    let encrypted = crypto::encrypt(content, passphrase, &salt)?;
+
+    // Write the encrypted blob
+    let target_path = encrypted_dir.join(&opaque);
+    fs::write(&target_path, &encrypted)
+        .map_err(|e| format!("Failed to write {}: {e}", opaque))?;
+
+    // Update manifest if this is a new file
+    if !manifest.files.contains_key(&opaque) {
+        manifest.files.insert(opaque, file_path.to_string());
+        save_manifest(encrypted_dir, &manifest, passphrase, &salt)?;
+    }
+
+    Ok(())
+}
+
+/// Remove a single file from an encrypted directory (deletes blob, updates manifest)
+pub fn remove_file(encrypted_dir: &Path, file_path: &str, passphrase: &str) -> Result<(), String> {
+    let mut manifest = load_manifest(encrypted_dir, passphrase)?;
+    let salt = load_salt(encrypted_dir)?;
+
+    let opaque = opaque_name(file_path, &salt);
+
+    if !manifest.files.contains_key(&opaque) {
+        return Err(format!("File not found in vault: {}", file_path));
+    }
+
+    // Remove the blob
+    let blob_path = encrypted_dir.join(&opaque);
+    fs::remove_file(&blob_path)
+        .map_err(|e| format!("Failed to remove {}: {e}", opaque))?;
+
+    // Update manifest
+    manifest.files.remove(&opaque);
+    save_manifest(encrypted_dir, &manifest, passphrase, &salt)?;
+
+    Ok(())
+}
+
 /// Unlock a directory to a temporary workspace (returns the temp dir path)
 pub fn unlock_dir(encrypted_dir: &Path, passphrase: &str) -> Result<PathBuf, String> {
     let temp_dir = tempfile::Builder::new()
