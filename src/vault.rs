@@ -52,6 +52,23 @@ echo "<CONTENT>" | ghostid write --dir <DIR> --file <PATH> -p <PASSPHRASE>
 ghostid remove --dir <DIR> --file <PATH> -p <PASSPHRASE>
 ```
 
+## MCP Server (Recommended)
+
+For a cleaner integration, GhostID can run as an MCP server. Add this to your Claude Code MCP settings:
+
+```json
+{
+  "mcpServers": {
+    "ghostid": {
+      "command": "ghostid",
+      "args": ["serve", "--dir", "<ABSOLUTE_PATH_TO_THIS_DIRECTORY>"]
+    }
+  }
+}
+```
+
+The server prompts for the passphrase on startup and holds it for the session. The AI uses native MCP tools (ghostid_list, ghostid_read, ghostid_write, ghostid_remove) instead of CLI commands. The passphrase never appears in the conversation.
+
 ## Rules
 
 - Never decrypt the vault to disk. All reads and writes go through the GhostID protocol.

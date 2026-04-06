@@ -51,6 +51,17 @@ enum Commands {
         passphrase: Option<String>,
     },
 
+    /// Start the GhostID MCP server for Claude Code integration
+    Serve {
+        /// Path to the encrypted directory
+        #[arg(short, long)]
+        dir: PathBuf,
+
+        /// Decryption passphrase (omit to be prompted)
+        #[arg(short, long)]
+        passphrase: Option<String>,
+    },
+
     /// List all files in an encrypted directory
     List {
         /// Path to the encrypted directory
@@ -184,6 +195,11 @@ fn run() -> Result<(), String> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Serve { dir, passphrase } => {
+            let pass = get_passphrase(passphrase);
+            ghostid::mcp::run(dir, pass)
+        }
+
         Commands::Encrypt {
             source,
             target,
