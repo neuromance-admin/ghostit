@@ -383,6 +383,25 @@ GhostID is designed to work at multiple levels:
 
 ---
 
+## Uninstall
+
+**Homebrew:**
+
+```
+brew uninstall ghostid
+brew untap neuromance-admin/tap
+```
+
+**Manual / build from source:**
+
+```
+rm /usr/local/bin/ghostid
+```
+
+No config files, no daemon, no account — just the binary. Your encrypted folders remain intact but will need GhostID (or a compatible decryptor) to unlock.
+
+---
+
 ## License
 
 Apache 2.0
