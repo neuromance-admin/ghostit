@@ -91,7 +91,11 @@ No filenames. No folder structure. No way to tell what's inside or how many file
 
 ## Commands
 
-### `ghostid encrypt`
+GhostID has two layers of commands: **folder-level** operations for encrypting and decrypting entire directories, and **file-level** operations for working inside an encrypted folder without ever decrypting it to disk.
+
+### Folder-Level Commands
+
+#### `ghostid encrypt`
 
 Encrypt a folder.
 
@@ -105,7 +109,7 @@ ghostid encrypt --source <FOLDER> --in-place
 
 In-place mode is safe. GhostID encrypts to a staging area, decrypts it back, compares every file byte-for-byte against the original, and only replaces the folder if verification passes. If anything fails, your original is untouched.
 
-### `ghostid decrypt`
+#### `ghostid decrypt`
 
 Decrypt an encrypted folder.
 
@@ -119,7 +123,7 @@ ghostid decrypt --source <ENCRYPTED> --in-place
 
 Same round-trip verification as encrypt. Your escape hatch — no lock-in, open format.
 
-### `ghostid unlock`
+#### `ghostid unlock`
 
 Decrypt to a temporary workspace for a working session.
 
@@ -128,7 +132,7 @@ ghostid unlock --dir <ENCRYPTED>
 # Unlocked. Workspace at: /tmp/ghostid-unlocked-a8f3e2
 ```
 
-### `ghostid lock`
+#### `ghostid lock`
 
 Re-encrypt a workspace and wipe the plaintext.
 
@@ -136,6 +140,66 @@ Re-encrypt a workspace and wipe the plaintext.
 ghostid lock --workspace /tmp/ghostid-unlocked-a8f3e2 --dir <ENCRYPTED>
 # Workspace wiped.
 ```
+
+---
+
+### File-Level Protocol Commands
+
+These commands operate on individual files inside an encrypted folder. The folder stays encrypted on disk at all times — plaintext never touches the filesystem.
+
+#### `ghostid list`
+
+List all files in an encrypted folder. Decrypts only the manifest.
+
+```
+$ ghostid list --dir ~/my-encrypted-folder
+Projects/ClientPitch.md
+Notes/meeting-notes.md
+Contracts/nda-draft.md
+```
+
+#### `ghostid read`
+
+Read a single file from an encrypted folder. Decrypts in memory, outputs to stdout. Nothing written to disk.
+
+```
+$ ghostid read --dir ~/my-encrypted-folder --file "Notes/meeting-notes.md"
+---
+title: Meeting Notes
+---
+
+# Meeting Notes
+
+Discussed encryption protocol...
+```
+
+#### `ghostid write`
+
+Write a file into an encrypted folder. Reads content from stdin, encrypts it, writes the blob. If the file is new, the manifest is updated. Plaintext never exists as a file.
+
+```
+echo "# New Note" | ghostid write --dir ~/my-encrypted-folder --file "Notes/new-note.md"
+```
+
+#### `ghostid remove`
+
+Remove a file from an encrypted folder. Deletes the blob and updates the manifest.
+
+```
+ghostid remove --dir ~/my-encrypted-folder --file "Notes/old-note.md"
+```
+
+---
+
+### Why This Matters
+
+With folder-level commands, you have to decrypt everything to work and re-encrypt when you're done. There's a window where your data is exposed.
+
+With file-level commands, that window is zero. The folder on disk is always encrypted. You list, read, write, and remove files through the protocol — plaintext only ever exists in memory, in the moment you need it.
+
+This is what makes GhostID an encryption protocol, not just an encryption tool.
+
+---
 
 All commands prompt for the passphrase interactively. Pass `-p` to provide it directly (not recommended — stays in shell history).
 
@@ -220,11 +284,11 @@ The format is open. The crypto is standard. Anyone can build a compatible decryp
 
 GhostID is designed to work at multiple levels:
 
-**As a CLI tool** — what you have now. Encrypt any folder, decrypt it back. Simple, standalone, no dependencies.
+**As a CLI tool** — encrypt any folder, decrypt it back. Simple, standalone, no dependencies.
+
+**As a file-level protocol** — list, read, write, and remove individual files inside an encrypted folder without ever decrypting it to disk. The folder stays encrypted at all times. Plaintext only exists in memory, in the moment you need it.
 
 **As a Rust library** — GhostID exposes its crypto primitives as a crate. Other applications can import it directly for file-level encryption and decryption without shelling out to the CLI.
-
-**As an encryption protocol** — the planned direction. Instead of encrypting and decrypting entire folders, GhostID operates as a transparent layer between an application and the filesystem. Files are encrypted on write and decrypted on read, in memory. Plaintext never touches the disk. The folder looks encrypted at all times, even during an active session.
 
 ---
 
@@ -233,7 +297,6 @@ GhostID is designed to work at multiple levels:
 - **No incremental writes** — locking re-encrypts the entire folder, not just changed files
 - **No rekey** — changing the passphrase requires a full decrypt/re-encrypt cycle
 - **No passphrase masking** — input is visible in the terminal
-- **Whole-folder operations only** — file-level read/write protocol is planned but not yet built
 
 ---
 
