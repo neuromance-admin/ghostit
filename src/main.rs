@@ -39,8 +39,12 @@ enum Commands {
         source: PathBuf,
 
         /// Path for the decrypted output directory
-        #[arg(short, long)]
-        target: PathBuf,
+        #[arg(short, long, required_unless_present = "in_place")]
+        target: Option<PathBuf>,
+
+        /// Decrypt in place (verify round-trip, then replace encrypted with plaintext)
+        #[arg(long, conflicts_with = "target")]
+        in_place: bool,
 
         /// Decryption passphrase (omit to be prompted)
         #[arg(short, long)]
@@ -88,17 +92,49 @@ fn get_passphrase(provided: Option<String>) -> String {
     }
 }
 
-fn main() {
+fn get_passphrase_for_encryption(provided: Option<String>) -> Result<String, String> {
+    match provided {
+        Some(p) => Ok(p),
+        None => {
+            eprintln!();
+            eprintln!("  WARNING: If you lose this passphrase, your data is permanently unrecoverable.");
+            eprintln!("  There is no reset. There is no backdoor. There is no support.");
+            eprintln!();
+            eprint!("  Enter passphrase (min 12 characters): ");
+            let mut input = String::new();
+            std::io::stdin()
+                .read_line(&mut input)
+                .expect("Failed to read passphrase");
+            let pass = input.trim().to_string();
+
+            eprint!("  Confirm passphrase: ");
+            let mut confirm = String::new();
+            std::io::stdin()
+                .read_line(&mut confirm)
+                .expect("Failed to read passphrase");
+            let confirm = confirm.trim().to_string();
+
+            if pass != confirm {
+                return Err("Passphrases do not match. Nothing was encrypted.".to_string());
+            }
+
+            eprintln!();
+            Ok(pass)
+        }
+    }
+}
+
+fn run() -> Result<(), String> {
     let cli = Cli::parse();
 
-    let result = match cli.command {
+    match cli.command {
         Commands::Encrypt {
             source,
             target,
             in_place,
             passphrase,
         } => {
-            let pass = get_passphrase(passphrase);
+            let pass = get_passphrase_for_encryption(passphrase)?;
             if in_place {
                 eprintln!("Encrypting in place: {}", source.display());
                 ghostid::vault::encrypt_in_place(&source, &pass)
@@ -112,11 +148,18 @@ fn main() {
         Commands::Decrypt {
             source,
             target,
+            in_place,
             passphrase,
         } => {
             let pass = get_passphrase(passphrase);
-            eprintln!("Decrypting: {}", source.display());
-            ghostid::vault::decrypt_dir(&source, &target, &pass)
+            if in_place {
+                eprintln!("Decrypting in place: {}", source.display());
+                ghostid::vault::decrypt_in_place(&source, &pass)
+            } else {
+                let target = target.unwrap();
+                eprintln!("Decrypting: {}", source.display());
+                ghostid::vault::decrypt_dir(&source, &target, &pass)
+            }
         }
 
         Commands::Unlock { dir, passphrase } => {
@@ -138,7 +181,7 @@ fn main() {
             dir,
             passphrase,
         } => {
-            let pass = get_passphrase(passphrase);
+            let pass = get_passphrase_for_encryption(passphrase)?;
             eprintln!("Re-encrypting: {}", workspace.display());
             let result = ghostid::vault::encrypt_dir(&workspace, &dir, &pass);
 
@@ -152,9 +195,11 @@ fn main() {
 
             result
         }
-    };
+    }
+}
 
-    if let Err(e) = result {
+fn main() {
+    if let Err(e) = run() {
         eprintln!("Error: {e}");
         std::process::exit(1);
     }

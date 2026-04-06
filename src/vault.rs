@@ -247,6 +247,142 @@ pub fn encrypt_in_place(source_dir: &Path, passphrase: &str) -> Result<(), Strin
     Ok(())
 }
 
+/// Decrypt a directory in place: decrypt to temp, verify, then replace encrypted with plaintext
+pub fn decrypt_in_place(encrypted_dir: &Path, passphrase: &str) -> Result<(), String> {
+    if !encrypted_dir.is_dir() {
+        return Err(format!(
+            "Encrypted dir not found: {}",
+            encrypted_dir.display()
+        ));
+    }
+
+    // Step 1: Decrypt to a temp directory
+    let temp_decrypted = tempfile::Builder::new()
+        .prefix("ghostid-decrypt-")
+        .tempdir()
+        .map_err(|e| format!("Failed to create temp dir: {e}"))?;
+
+    eprintln!("  Decrypting to staging area...");
+    decrypt_dir(encrypted_dir, temp_decrypted.path(), passphrase)?;
+
+    // Step 2: Verify round-trip by re-encrypting and checking the manifest decrypts
+    let temp_verify = tempfile::Builder::new()
+        .prefix("ghostid-verify-")
+        .tempdir()
+        .map_err(|e| format!("Failed to create verify dir: {e}"))?;
+
+    eprintln!("  Verifying round-trip...");
+    encrypt_dir(temp_decrypted.path(), temp_verify.path(), passphrase)?;
+
+    // Verify the re-encrypted data decrypts back to the same plaintext
+    let temp_check = tempfile::Builder::new()
+        .prefix("ghostid-check-")
+        .tempdir()
+        .map_err(|e| format!("Failed to create check dir: {e}"))?;
+
+    decrypt_dir(temp_verify.path(), temp_check.path(), passphrase)?;
+
+    // Compare against the first decryption
+    let decrypted_files: Vec<_> = WalkDir::new(temp_decrypted.path())
+        .into_iter()
+        .filter_map(|e| e.ok())
+        .filter(|e| e.file_type().is_file())
+        .collect();
+
+    for entry in &decrypted_files {
+        let relative = entry
+            .path()
+            .strip_prefix(temp_decrypted.path())
+            .map_err(|e| format!("Path strip failed: {e}"))?;
+        let check_path = temp_check.path().join(relative);
+
+        if !check_path.exists() {
+            return Err(format!(
+                "Verification failed: {} missing after round-trip",
+                relative.display()
+            ));
+        }
+
+        let original = fs::read(entry.path())
+            .map_err(|e| format!("Failed to read decrypted {}: {e}", relative.display()))?;
+        let recovered = fs::read(&check_path)
+            .map_err(|e| format!("Failed to read verified {}: {e}", relative.display()))?;
+
+        if original != recovered {
+            return Err(format!(
+                "Verification failed: {} differs after round-trip. Encrypted data untouched.",
+                relative.display()
+            ));
+        }
+    }
+
+    eprintln!("  Verification passed. Replacing encrypted data with plaintext...");
+
+    // Step 3: Remove encrypted contents
+    for entry in fs::read_dir(encrypted_dir)
+        .map_err(|e| format!("Failed to read encrypted dir: {e}"))?
+    {
+        let entry = entry.map_err(|e| format!("Dir entry error: {e}"))?;
+        let path = entry.path();
+        if path.is_dir() {
+            fs::remove_dir_all(&path)
+                .map_err(|e| format!("Failed to remove {}: {e}", path.display()))?;
+        } else {
+            fs::remove_file(&path)
+                .map_err(|e| format!("Failed to remove {}: {e}", path.display()))?;
+        }
+    }
+
+    // Step 4: Move decrypted contents into the original directory
+    for entry in fs::read_dir(temp_decrypted.path())
+        .map_err(|e| format!("Failed to read decrypted dir: {e}"))?
+    {
+        let entry = entry.map_err(|e| format!("Dir entry error: {e}"))?;
+        let dest = encrypted_dir.join(entry.file_name());
+        if entry.path().is_dir() {
+            // fs::rename may fail across filesystems, so copy recursively
+            copy_dir_recursive(&entry.path(), &dest)?;
+        } else {
+            fs::rename(entry.path(), &dest).map_err(|e| {
+                format!(
+                    "Failed to move {}: {e}",
+                    entry.file_name().to_string_lossy()
+                )
+            })?;
+        }
+    }
+
+    eprintln!(
+        "  In-place decryption complete. {} is now plaintext.",
+        encrypted_dir.display()
+    );
+
+    Ok(())
+}
+
+/// Recursively copy a directory
+fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
+    fs::create_dir_all(dst).map_err(|e| format!("Failed to create {}: {e}", dst.display()))?;
+    for entry in WalkDir::new(src)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
+        let relative = entry
+            .path()
+            .strip_prefix(src)
+            .map_err(|e| format!("Path strip failed: {e}"))?;
+        let target = dst.join(relative);
+        if entry.file_type().is_dir() {
+            fs::create_dir_all(&target)
+                .map_err(|e| format!("Failed to create dir {}: {e}", target.display()))?;
+        } else {
+            fs::copy(entry.path(), &target)
+                .map_err(|e| format!("Failed to copy {}: {e}", relative.display()))?;
+        }
+    }
+    Ok(())
+}
+
 /// Unlock a directory to a temporary workspace (returns the temp dir path)
 pub fn unlock_dir(encrypted_dir: &Path, passphrase: &str) -> Result<PathBuf, String> {
     let temp_dir = tempfile::Builder::new()
