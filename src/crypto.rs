@@ -106,7 +106,7 @@ mod tests {
 
     #[test]
     fn round_trip() {
-        let plaintext = b"---\nvmdId: TEST-001\n---\n\n# Hello GhostID\n\nThis is a test.";
+        let plaintext = b"---\nvmdId: TEST-001\n---\n\n# Hello GhostIT\n\nThis is a test.";
         let passphrase = "test-passphrase-123";
         let salt = generate_salt();
 

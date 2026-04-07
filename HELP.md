@@ -1,4 +1,4 @@
-# GhostID CLI — Help
+# GhostIT CLI — Help
 
 > Encrypt any folder on your drive. No account. No server. Your key, your data.
 
@@ -7,9 +7,9 @@
 
 ---
 
-## What GhostID Does
+## What GhostIT Does
 
-GhostID encrypts entire folders into unreadable `.ghost` blobs. No filenames, no folder structure, no readable content — just binary noise. The only thing that can reverse it is the passphrase you set.
+GhostIT encrypts entire folders into unreadable `.ghost` blobs. No filenames, no folder structure, no readable content — just binary noise. The only thing that can reverse it is the passphrase you set.
 
 There is no account. There is no server. There is no recovery. If you lose your passphrase, your data is gone. That is the design.
 
@@ -17,43 +17,43 @@ There is no account. There is no server. There is no recovery. If you lose your 
 
 ## Installation
 
-GhostID is a Rust binary. Build from source:
+GhostIT is a Rust binary. Build from source:
 
 ```
 cd ghostid-cli
 cargo build --release
 ```
 
-The binary lands at `target/release/ghostid`. To make it available system-wide:
+The binary lands at `target/release/ghostit`. To make it available system-wide:
 
 ```
-sudo ln -s /full/path/to/ghostid-cli/target/release/ghostid /usr/local/bin/ghostid
+sudo ln -s /full/path/to/ghostid-cli/target/release/ghostit /usr/local/bin/ghostit
 ```
 
 Verify:
 
 ```
-ghostid --version
+ghostit --version
 ```
 
 ---
 
 ## Commands
 
-### `ghostid encrypt`
+### `ghostit on`
 
-Encrypt a folder into GhostID format.
+Encrypt a folder into GhostIT format.
 
 **To a separate location:**
 
 ```
-ghostid encrypt --source <FOLDER> --target <OUTPUT>
+ghostit on --source <FOLDER> --target <OUTPUT>
 ```
 
 **In place (replaces the original):**
 
 ```
-ghostid encrypt --source <FOLDER> --in-place
+ghostit on --source <FOLDER> --in-place
 ```
 
 In-place mode is safe — it encrypts to a staging area, verifies a full round-trip decrypt, compares every file byte-for-byte against the original, and only replaces the folder if verification passes. If anything fails, your original folder is untouched.
@@ -75,12 +75,12 @@ In-place mode is safe — it encrypts to a staging area, verifies a full round-t
 
 ---
 
-### `ghostid decrypt`
+### `ghostit off`
 
-Decrypt a GhostID directory back to its original form. Full permanent export.
+Decrypt a GhostIT directory back to its original form. Full permanent export.
 
 ```
-ghostid decrypt --source <ENCRYPTED> --target <OUTPUT>
+ghostit off --source <ENCRYPTED> --target <OUTPUT>
 ```
 
 **Options:**
@@ -95,12 +95,12 @@ This is your escape hatch. No lock-in — standard crypto, open format. You can 
 
 ---
 
-### `ghostid unlock`
+### `ghostit unlock`
 
 Decrypt an encrypted directory to a temporary workspace for a working session.
 
 ```
-ghostid unlock --dir <ENCRYPTED>
+ghostit unlock --dir <ENCRYPTED>
 ```
 
 Outputs the path to the temporary workspace. Work with your files normally, then lock when done.
@@ -115,20 +115,20 @@ Outputs the path to the temporary workspace. Work with your files normally, then
 **Example:**
 
 ```
-$ ghostid unlock --dir ~/my-encrypted-folder
+$ ghostit unlock --dir ~/my-encrypted-folder
 Passphrase: ********
-Unlocked. Workspace at: /tmp/ghostid-unlocked-a8f3e2
-Run `ghostid lock` when done to re-encrypt.
+Unlocked. Workspace at: /tmp/ghostit-unlocked-a8f3e2
+Run `ghostit lock` when done to re-encrypt.
 ```
 
 ---
 
-### `ghostid lock`
+### `ghostit lock`
 
 Re-encrypt a temporary workspace and securely wipe the plaintext.
 
 ```
-ghostid lock --workspace <TEMP_PATH> --dir <ENCRYPTED>
+ghostit lock --workspace <TEMP_PATH> --dir <ENCRYPTED>
 ```
 
 **Options:**
@@ -142,7 +142,7 @@ ghostid lock --workspace <TEMP_PATH> --dir <ENCRYPTED>
 **Example:**
 
 ```
-$ ghostid lock --workspace /tmp/ghostid-unlocked-a8f3e2 --dir ~/my-encrypted-folder
+$ ghostit lock --workspace /tmp/ghostit-unlocked-a8f3e2 --dir ~/my-encrypted-folder
 Passphrase: ********
 Workspace wiped.
 ```
@@ -156,13 +156,13 @@ Workspace wiped.
 Encrypt a folder and keep the encrypted version:
 
 ```
-ghostid encrypt --source ~/Documents/private --target ~/Documents/private-encrypted
+ghostit on --source ~/Documents/private --target ~/Documents/private-encrypted
 ```
 
 Verify it worked:
 
 ```
-ghostid decrypt --source ~/Documents/private-encrypted --target /tmp/verify
+ghostit off --source ~/Documents/private-encrypted --target /tmp/verify
 diff -r ~/Documents/private /tmp/verify
 rm -rf /tmp/verify
 ```
@@ -174,7 +174,7 @@ Then remove the original when you're confident.
 Encrypt a folder where it stands — verification is automatic:
 
 ```
-ghostid encrypt --source ~/Documents/private --in-place
+ghostit on --source ~/Documents/private --in-place
 ```
 
 Your folder is now `.ghost` blobs. Decrypt to get it back.
@@ -185,13 +185,13 @@ For folders you need to work in regularly:
 
 ```
 # Start working
-ghostid unlock --dir ~/Documents/private
-# → Workspace at: /tmp/ghostid-unlocked-a8f3e2
+ghostit unlock --dir ~/Documents/private
+# → Workspace at: /tmp/ghostit-unlocked-a8f3e2
 
 # ... edit files normally ...
 
 # Done — re-encrypt and wipe
-ghostid lock --workspace /tmp/ghostid-unlocked-a8f3e2 --dir ~/Documents/private
+ghostit lock --workspace /tmp/ghostit-unlocked-a8f3e2 --dir ~/Documents/private
 ```
 
 ### Full export
@@ -199,7 +199,7 @@ ghostid lock --workspace /tmp/ghostid-unlocked-a8f3e2 --dir ~/Documents/private
 Get everything back permanently:
 
 ```
-ghostid decrypt --source ~/Documents/private --target ~/Documents/private-decrypted
+ghostit off --source ~/Documents/private --target ~/Documents/private-decrypted
 ```
 
 ---
@@ -226,7 +226,7 @@ my-folder/
   .ghost-salt
 ```
 
-No filenames. No folder structure. No readable content. Only `GHST` magic bytes identify these as GhostID files.
+No filenames. No folder structure. No readable content. Only `GHST` magic bytes identify these as GhostIT files.
 
 ---
 
@@ -270,7 +270,7 @@ The format is open. Anyone can build a decryptor with the spec and the passphras
 
 ## Threat Model
 
-GhostID protects against:
+GhostIT protects against:
 
 | Threat | Description |
 |---|---|

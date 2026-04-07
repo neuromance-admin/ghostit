@@ -27,51 +27,51 @@ fn opaque_name(relative_path: &str, salt: &[u8; 32]) -> String {
 }
 
 /// The CLAUDE.md content that enables Claude Code to work with encrypted vaults
-const CLAUDE_MD: &str = r#"# GhostID Encrypted Vault
+const CLAUDE_MD: &str = r#"# GhostIT Encrypted Vault
 
-This directory is encrypted with GhostID. All files except this one are `.ghost` blobs.
+This directory is encrypted with GhostIT. All files except this one are `.ghost` blobs.
 
 ## Boot Sequence
 
-1. Check for `.ghost-manifest` in this directory. If it exists, this vault is GhostID-encrypted.
+1. Check for `.ghost-manifest` in this directory. If it exists, this vault is GhostIT-encrypted.
 2. Ask the owner for the passphrase.
-3. Use `ghostid` CLI commands for ALL file operations — never use normal file reads or writes.
-4. Load the runtime or root file: `ghostid read --dir <this directory> --file "<filename>" -p <passphrase>`
-5. Use `ghostid list` to see what files exist.
-6. Use `ghostid read` to read any file (outputs to stdout, nothing written to disk).
-7. Use `ghostid write` to create or update files (pipe content via stdin).
-8. Use `ghostid remove` to delete files.
+3. Use `ghostit` CLI commands for ALL file operations — never use normal file reads or writes.
+4. Load the runtime or root file: `ghostit read --dir <this directory> --file "<filename>" -p <passphrase>`
+5. Use `ghostit list` to see what files exist.
+6. Use `ghostit read` to read any file (outputs to stdout, nothing written to disk).
+7. Use `ghostit write` to create or update files (pipe content via stdin).
+8. Use `ghostit remove` to delete files.
 9. Hold the passphrase in conversation memory for the session. Pass it via `-p` to every command.
 
 ## Command Reference
 
 ```
-ghostid list --dir <DIR> -p <PASSPHRASE>
-ghostid read --dir <DIR> --file <PATH> -p <PASSPHRASE>
-echo "<CONTENT>" | ghostid write --dir <DIR> --file <PATH> -p <PASSPHRASE>
-ghostid remove --dir <DIR> --file <PATH> -p <PASSPHRASE>
+ghostit list --dir <DIR> -p <PASSPHRASE>
+ghostit read --dir <DIR> --file <PATH> -p <PASSPHRASE>
+echo "<CONTENT>" | ghostit write --dir <DIR> --file <PATH> -p <PASSPHRASE>
+ghostit remove --dir <DIR> --file <PATH> -p <PASSPHRASE>
 ```
 
 ## MCP Server (Recommended)
 
-For a cleaner integration, GhostID can run as an MCP server. Add this to your Claude Code MCP settings:
+For a cleaner integration, GhostIT can run as an MCP server. Add this to your Claude Code MCP settings:
 
 ```json
 {
   "mcpServers": {
-    "ghostid": {
-      "command": "ghostid",
+    "ghostit": {
+      "command": "ghostit",
       "args": ["serve", "--dir", "<ABSOLUTE_PATH_TO_THIS_DIRECTORY>"]
     }
   }
 }
 ```
 
-The server prompts for the passphrase on startup and holds it for the session. The AI uses native MCP tools (ghostid_list, ghostid_read, ghostid_write, ghostid_remove) instead of CLI commands. The passphrase never appears in the conversation.
+The server prompts for the passphrase on startup and holds it for the session. The AI uses native MCP tools (ghostit_list, ghostit_read, ghostit_write, ghostit_remove) instead of CLI commands. The passphrase never appears in the conversation.
 
 ## Rules
 
-- Never decrypt the vault to disk. All reads and writes go through the GhostID protocol.
+- Never decrypt the vault to disk. All reads and writes go through the GhostIT protocol.
 - Plaintext only exists in memory, in conversation context. Never on the filesystem.
 - If the passphrase is wrong, stop and ask again. Do not attempt to brute-force.
 - The vault on disk must look encrypted at all times.
@@ -82,10 +82,10 @@ The server prompts for the passphrase on startup and holds it for the session. T
 fn write_claude_md(target_dir: &Path) -> Result<(), String> {
     let claude_path = target_dir.join("CLAUDE.md");
     if claude_path.exists() {
-        // Append to existing CLAUDE.md if it doesn't already have GhostID instructions
+        // Append to existing CLAUDE.md if it doesn't already have GhostIT instructions
         let existing = fs::read_to_string(&claude_path)
             .map_err(|e| format!("Failed to read CLAUDE.md: {e}"))?;
-        if !existing.contains("GhostID Encrypted Vault") {
+        if !existing.contains("GhostIT Encrypted Vault") {
             let updated = format!("{}\n\n---\n\n{}", existing.trim(), CLAUDE_MD);
             fs::write(&claude_path, updated)
                 .map_err(|e| format!("Failed to update CLAUDE.md: {e}"))?;
@@ -117,7 +117,7 @@ pub fn encrypt_dir(
         files: HashMap::new(),
     };
 
-    // Walk and encrypt every file (skip GhostID metadata and CLAUDE.md)
+    // Walk and encrypt every file (skip GhostIT metadata and CLAUDE.md)
     let entries: Vec<_> = WalkDir::new(source_dir)
         .into_iter()
         .filter_map(|e| e.ok())
@@ -241,7 +241,7 @@ pub fn encrypt_in_place(source_dir: &Path, passphrase: &str) -> Result<(), Strin
 
     // Step 1: Encrypt to a temp directory
     let temp_encrypted = tempfile::Builder::new()
-        .prefix("ghostid-encrypt-")
+        .prefix("ghostit-encrypt-")
         .tempdir()
         .map_err(|e| format!("Failed to create temp dir: {e}"))?;
 
@@ -250,7 +250,7 @@ pub fn encrypt_in_place(source_dir: &Path, passphrase: &str) -> Result<(), Strin
 
     // Step 2: Verify round-trip by decrypting back to another temp dir
     let temp_verify = tempfile::Builder::new()
-        .prefix("ghostid-verify-")
+        .prefix("ghostit-verify-")
         .tempdir()
         .map_err(|e| format!("Failed to create verify dir: {e}"))?;
 
@@ -337,7 +337,7 @@ pub fn decrypt_in_place(encrypted_dir: &Path, passphrase: &str) -> Result<(), St
 
     // Step 1: Decrypt to a temp directory
     let temp_decrypted = tempfile::Builder::new()
-        .prefix("ghostid-decrypt-")
+        .prefix("ghostit-decrypt-")
         .tempdir()
         .map_err(|e| format!("Failed to create temp dir: {e}"))?;
 
@@ -346,7 +346,7 @@ pub fn decrypt_in_place(encrypted_dir: &Path, passphrase: &str) -> Result<(), St
 
     // Step 2: Verify round-trip by re-encrypting and checking the manifest decrypts
     let temp_verify = tempfile::Builder::new()
-        .prefix("ghostid-verify-")
+        .prefix("ghostit-verify-")
         .tempdir()
         .map_err(|e| format!("Failed to create verify dir: {e}"))?;
 
@@ -355,7 +355,7 @@ pub fn decrypt_in_place(encrypted_dir: &Path, passphrase: &str) -> Result<(), St
 
     // Verify the re-encrypted data decrypts back to the same plaintext
     let temp_check = tempfile::Builder::new()
-        .prefix("ghostid-check-")
+        .prefix("ghostit-check-")
         .tempdir()
         .map_err(|e| format!("Failed to create check dir: {e}"))?;
 
@@ -431,16 +431,16 @@ pub fn decrypt_in_place(encrypted_dir: &Path, passphrase: &str) -> Result<(), St
         }
     }
 
-    // Remove GhostID CLAUDE.md — no longer needed in plaintext mode
+    // Remove GhostIT CLAUDE.md — no longer needed in plaintext mode
     let claude_path = encrypted_dir.join("CLAUDE.md");
     if claude_path.exists() {
         let content = fs::read_to_string(&claude_path).unwrap_or_default();
-        if content.contains("GhostID Encrypted Vault") && !content.contains("\n\n---\n\n# GhostID") {
-            // CLAUDE.md was created by GhostID — remove it entirely
+        if content.contains("GhostIT Encrypted Vault") && !content.contains("\n\n---\n\n# GhostIT") {
+            // CLAUDE.md was created by GhostIT — remove it entirely
             let _ = fs::remove_file(&claude_path);
-        } else if content.contains("GhostID Encrypted Vault") {
-            // GhostID section was appended — strip it
-            if let Some(pos) = content.find("\n\n---\n\n# GhostID Encrypted Vault") {
+        } else if content.contains("GhostIT Encrypted Vault") {
+            // GhostIT section was appended — strip it
+            if let Some(pos) = content.find("\n\n---\n\n# GhostIT Encrypted Vault") {
                 let cleaned = content[..pos].to_string();
                 let _ = fs::write(&claude_path, cleaned);
             }
@@ -595,7 +595,7 @@ pub fn remove_file(encrypted_dir: &Path, file_path: &str, passphrase: &str) -> R
 /// Unlock a directory to a temporary workspace (returns the temp dir path)
 pub fn unlock_dir(encrypted_dir: &Path, passphrase: &str) -> Result<PathBuf, String> {
     let temp_dir = tempfile::Builder::new()
-        .prefix("ghostid-unlocked-")
+        .prefix("ghostit-unlocked-")
         .tempdir()
         .map_err(|e| format!("Failed to create temp dir: {e}"))?;
 
@@ -625,7 +625,7 @@ mod tests {
     fn decrypt_and_re_encrypt_round_trip() {
         let (_temp_plain, plaintext_path) = decrypt_test_data();
 
-        // Re-encrypt into GhostID format
+        // Re-encrypt into GhostIT format
         let temp_re_encrypted = tempfile::tempdir().unwrap();
         encrypt_dir(&plaintext_path, temp_re_encrypted.path(), TEST_PASSPHRASE).unwrap();
 

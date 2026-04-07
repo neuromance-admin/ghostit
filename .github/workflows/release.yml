@@ -15,16 +15,16 @@ jobs:
         include:
           - target: x86_64-apple-darwin
             os: macos-latest
-            name: ghostid-macos-intel
+            name: ghostit-macos-intel
           - target: aarch64-apple-darwin
             os: macos-latest
-            name: ghostid-macos-arm
+            name: ghostit-macos-arm
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
-            name: ghostid-linux-x86_64
+            name: ghostit-linux-x86_64
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
-            name: ghostid-linux-arm64
+            name: ghostit-linux-arm64
 
     runs-on: ${{ matrix.os }}
 
@@ -49,7 +49,7 @@ jobs:
       - name: Package binary
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf ../../../${{ matrix.name }}.tar.gz ghostid
+          tar czf ../../../${{ matrix.name }}.tar.gz ghostit
           cd ../../..
 
       - name: Upload artifact
@@ -79,10 +79,10 @@ jobs:
       - name: Generate checksums
         id: checksums
         run: |
-          echo "macos_arm=$(shasum -a 256 artifacts/ghostid-macos-arm/ghostid-macos-arm.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
-          echo "macos_intel=$(shasum -a 256 artifacts/ghostid-macos-intel/ghostid-macos-intel.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
-          echo "linux_x86_64=$(shasum -a 256 artifacts/ghostid-linux-x86_64/ghostid-linux-x86_64.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
-          echo "linux_arm64=$(shasum -a 256 artifacts/ghostid-linux-arm64/ghostid-linux-arm64.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "macos_arm=$(shasum -a 256 artifacts/ghostit-macos-arm/ghostit-macos-arm.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "macos_intel=$(shasum -a 256 artifacts/ghostit-macos-intel/ghostit-macos-intel.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "linux_x86_64=$(shasum -a 256 artifacts/ghostit-linux-x86_64/ghostit-linux-x86_64.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
+          echo "linux_arm64=$(shasum -a 256 artifacts/ghostit-linux-arm64/ghostit-linux-arm64.tar.gz | awk '{print $1}')" >> $GITHUB_OUTPUT
 
       - name: Update Homebrew formula
         env:
@@ -91,48 +91,48 @@ jobs:
           VERSION="${GITHUB_REF_NAME#v}"
           TAG="${GITHUB_REF_NAME}"
 
-          cat > /tmp/ghostid.rb <<FORMULA
-          class Ghostid < Formula
+          cat > /tmp/ghostit.rb <<FORMULA
+          class Ghostit < Formula
             desc "Encrypt any folder on your drive. No account. No server. Your key, your data."
-            homepage "https://github.com/neuromance-admin/ghostid"
+            homepage "https://github.com/neuromance-admin/ghostit"
             version "${VERSION}"
             license "Apache-2.0"
 
             on_macos do
               if Hardware::CPU.arm?
-                url "https://github.com/neuromance-admin/ghostid/releases/download/${TAG}/ghostid-macos-arm.tar.gz"
+                url "https://github.com/neuromance-admin/ghostit/releases/download/${TAG}/ghostit-macos-arm.tar.gz"
                 sha256 "${{ steps.checksums.outputs.macos_arm }}"
               else
-                url "https://github.com/neuromance-admin/ghostid/releases/download/${TAG}/ghostid-macos-intel.tar.gz"
+                url "https://github.com/neuromance-admin/ghostit/releases/download/${TAG}/ghostit-macos-intel.tar.gz"
                 sha256 "${{ steps.checksums.outputs.macos_intel }}"
               end
             end
 
             on_linux do
               if Hardware::CPU.arm?
-                url "https://github.com/neuromance-admin/ghostid/releases/download/${TAG}/ghostid-linux-arm64.tar.gz"
+                url "https://github.com/neuromance-admin/ghostit/releases/download/${TAG}/ghostit-linux-arm64.tar.gz"
                 sha256 "${{ steps.checksums.outputs.linux_arm64 }}"
               else
-                url "https://github.com/neuromance-admin/ghostid/releases/download/${TAG}/ghostid-linux-x86_64.tar.gz"
+                url "https://github.com/neuromance-admin/ghostit/releases/download/${TAG}/ghostit-linux-x86_64.tar.gz"
                 sha256 "${{ steps.checksums.outputs.linux_x86_64 }}"
               end
             end
 
             def install
-              bin.install "ghostid"
+              bin.install "ghostit"
             end
 
             test do
-              assert_match "ghostid #{version}", shell_output("#{bin}/ghostid --version")
+              assert_match "ghostit #{version}", shell_output("#{bin}/ghostit --version")
             end
           end
           FORMULA
 
           # Remove leading whitespace from heredoc
-          sed -i 's/^          //' /tmp/ghostid.rb
+          sed -i 's/^          //' /tmp/ghostit.rb
 
-          gh api repos/neuromance-admin/homebrew-tap/contents/Formula/ghostid.rb \
+          gh api repos/neuromance-admin/homebrew-tap/contents/Formula/ghostit.rb \
             --method PUT \
-            --field message="Update GhostID to ${TAG}" \
-            --field content="$(base64 -w0 /tmp/ghostid.rb)" \
-            --field sha="$(gh api repos/neuromance-admin/homebrew-tap/contents/Formula/ghostid.rb --jq '.sha')"
+            --field message="Update GhostIT to ${TAG}" \
+            --field content="$(base64 -w0 /tmp/ghostit.rb)" \
+            --field sha="$(gh api repos/neuromance-admin/homebrew-tap/contents/Formula/ghostit.rb --jq '.sha')"

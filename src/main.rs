@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "ghostid")]
+#[command(name = "ghostit")]
 #[command(about = "Encrypt any folder on your drive. No account. No server. Your key, your data.")]
 #[command(version)]
 struct Cli {
@@ -13,8 +13,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Encrypt a folder into a GhostID encrypted directory
-    Encrypt {
+    /// Turn encryption on for a folder
+    On {
         /// Path to the source folder
         #[arg(short, long)]
         source: PathBuf,
@@ -32,8 +32,8 @@ enum Commands {
         passphrase: Option<String>,
     },
 
-    /// Decrypt a GhostID directory back to its original form
-    Decrypt {
+    /// Turn encryption off for a directory
+    Off {
         /// Path to the encrypted directory
         #[arg(short, long)]
         source: PathBuf,
@@ -51,7 +51,7 @@ enum Commands {
         passphrase: Option<String>,
     },
 
-    /// Start the GhostID MCP server for Claude Code integration
+    /// Start the GhostIT MCP server for Claude Code integration
     Serve {
         /// Path to the encrypted directory
         #[arg(short, long)]
@@ -197,10 +197,10 @@ fn run() -> Result<(), String> {
     match cli.command {
         Commands::Serve { dir, passphrase } => {
             let pass = get_passphrase(passphrase);
-            ghostid::mcp::run(dir, pass)
+            ghostit::mcp::run(dir, pass)
         }
 
-        Commands::Encrypt {
+        Commands::On {
             source,
             target,
             in_place,
@@ -209,15 +209,15 @@ fn run() -> Result<(), String> {
             let pass = get_passphrase_for_encryption(passphrase)?;
             if in_place {
                 eprintln!("Encrypting in place: {}", source.display());
-                ghostid::vault::encrypt_in_place(&source, &pass)
+                ghostit::vault::encrypt_in_place(&source, &pass)
             } else {
                 let target = target.unwrap();
                 eprintln!("Encrypting: {}", source.display());
-                ghostid::vault::encrypt_dir(&source, &target, &pass)
+                ghostit::vault::encrypt_dir(&source, &target, &pass)
             }
         }
 
-        Commands::Decrypt {
+        Commands::Off {
             source,
             target,
             in_place,
@@ -226,17 +226,17 @@ fn run() -> Result<(), String> {
             let pass = get_passphrase(passphrase);
             if in_place {
                 eprintln!("Decrypting in place: {}", source.display());
-                ghostid::vault::decrypt_in_place(&source, &pass)
+                ghostit::vault::decrypt_in_place(&source, &pass)
             } else {
                 let target = target.unwrap();
                 eprintln!("Decrypting: {}", source.display());
-                ghostid::vault::decrypt_dir(&source, &target, &pass)
+                ghostit::vault::decrypt_dir(&source, &target, &pass)
             }
         }
 
         Commands::List { dir, passphrase } => {
             let pass = get_passphrase(passphrase);
-            let files = ghostid::vault::list_files(&dir, &pass)?;
+            let files = ghostit::vault::list_files(&dir, &pass)?;
             for f in &files {
                 println!("{}", f);
             }
@@ -249,7 +249,7 @@ fn run() -> Result<(), String> {
             passphrase,
         } => {
             let pass = get_passphrase(passphrase);
-            let content = ghostid::vault::read_file(&dir, &file, &pass)?;
+            let content = ghostit::vault::read_file(&dir, &file, &pass)?;
             use std::io::Write;
             std::io::stdout()
                 .write_all(&content)
@@ -268,7 +268,7 @@ fn run() -> Result<(), String> {
             std::io::stdin()
                 .read_to_end(&mut content)
                 .map_err(|e| format!("Failed to read from stdin: {e}"))?;
-            ghostid::vault::write_file(&dir, &file, &content, &pass)?;
+            ghostit::vault::write_file(&dir, &file, &content, &pass)?;
             eprintln!("  Written: {}", file);
             Ok(())
         }
@@ -279,7 +279,7 @@ fn run() -> Result<(), String> {
             passphrase,
         } => {
             let pass = get_passphrase(passphrase);
-            ghostid::vault::remove_file(&dir, &file, &pass)?;
+            ghostit::vault::remove_file(&dir, &file, &pass)?;
             eprintln!("  Removed: {}", file);
             Ok(())
         }
@@ -287,11 +287,11 @@ fn run() -> Result<(), String> {
         Commands::Unlock { dir, passphrase } => {
             let pass = get_passphrase(passphrase);
             eprintln!("Unlocking: {}", dir.display());
-            match ghostid::vault::unlock_dir(&dir, &pass) {
+            match ghostit::vault::unlock_dir(&dir, &pass) {
                 Ok(temp_path) => {
                     println!("{}", temp_path.display());
                     eprintln!("Unlocked. Workspace at: {}", temp_path.display());
-                    eprintln!("Run `ghostid lock` when done to re-encrypt.");
+                    eprintln!("Run `ghostit lock` when done to re-encrypt.");
                     Ok(())
                 }
                 Err(e) => Err(e),
@@ -305,7 +305,7 @@ fn run() -> Result<(), String> {
         } => {
             let pass = get_passphrase_for_encryption(passphrase)?;
             eprintln!("Re-encrypting: {}", workspace.display());
-            let result = ghostid::vault::encrypt_dir(&workspace, &dir, &pass);
+            let result = ghostit::vault::encrypt_dir(&workspace, &dir, &pass);
 
             if result.is_ok() {
                 if let Err(e) = std::fs::remove_dir_all(&workspace) {

@@ -1,4 +1,4 @@
-//! GhostID file format (.ghost)
+//! GhostIT file format (.ghost)
 //!
 //! Layout (per file):
 //!   [4 bytes]  magic: b"GHST"
@@ -35,7 +35,7 @@ impl GhostHeader {
         }
 
         if &data[0..4] != MAGIC {
-            return Err("Not a GhostID file (bad magic bytes)".into());
+            return Err("Not a GhostIT file (bad magic bytes)".into());
         }
 
         let version = u16::from_le_bytes([data[4], data[5]]);

@@ -1,4 +1,4 @@
-//! MCP (Model Context Protocol) server for GhostID
+//! MCP (Model Context Protocol) server for GhostIT
 //!
 //! Exposes encrypted vault operations as MCP tools over stdio.
 //! The passphrase is held in memory for the session — never transmitted over the protocol.
@@ -14,7 +14,7 @@ use crate::vault;
 pub fn run(dir: PathBuf, passphrase: String) -> Result<(), String> {
     // Verify the passphrase works by loading the manifest
     let _ = vault::list_files(&dir, &passphrase)?;
-    eprintln!("GhostID MCP server running. Vault: {}", dir.display());
+    eprintln!("GhostIT MCP server running. Vault: {}", dir.display());
 
     let stdin = io::stdin();
     let stdout = io::stdout();
@@ -58,7 +58,7 @@ fn handle_request(request: &Value, dir: &Path, passphrase: &str) -> Option<Value
                     "tools": {}
                 },
                 "serverInfo": {
-                    "name": "ghostid",
+                    "name": "ghostit",
                     "version": "0.1.0"
                 }
             })))
@@ -70,7 +70,7 @@ fn handle_request(request: &Value, dir: &Path, passphrase: &str) -> Option<Value
             Some(jsonrpc_response(id, json!({
                 "tools": [
                     {
-                        "name": "ghostid_list",
+                        "name": "ghostit_list",
                         "description": "List all files in the encrypted vault. Returns file paths sorted alphabetically.",
                         "inputSchema": {
                             "type": "object",
@@ -79,7 +79,7 @@ fn handle_request(request: &Value, dir: &Path, passphrase: &str) -> Option<Value
                         }
                     },
                     {
-                        "name": "ghostid_read",
+                        "name": "ghostit_read",
                         "description": "Read a single file from the encrypted vault. Returns the decrypted content. The file is never written to disk as plaintext.",
                         "inputSchema": {
                             "type": "object",
@@ -93,7 +93,7 @@ fn handle_request(request: &Value, dir: &Path, passphrase: &str) -> Option<Value
                         }
                     },
                     {
-                        "name": "ghostid_write",
+                        "name": "ghostit_write",
                         "description": "Write a file to the encrypted vault. The content is encrypted before writing to disk. Plaintext never exists as a file. If the file is new, the manifest is updated.",
                         "inputSchema": {
                             "type": "object",
@@ -111,7 +111,7 @@ fn handle_request(request: &Value, dir: &Path, passphrase: &str) -> Option<Value
                         }
                     },
                     {
-                        "name": "ghostid_remove",
+                        "name": "ghostit_remove",
                         "description": "Remove a file from the encrypted vault. Deletes the encrypted blob and updates the manifest.",
                         "inputSchema": {
                             "type": "object",
@@ -173,12 +173,12 @@ fn handle_tool_call(
     passphrase: &str,
 ) -> Result<String, String> {
     match tool_name {
-        "ghostid_list" => {
+        "ghostit_list" => {
             let files = vault::list_files(dir, passphrase)?;
             Ok(files.join("\n"))
         }
 
-        "ghostid_read" => {
+        "ghostit_read" => {
             let file = args.get("file")
                 .and_then(|v| v.as_str())
                 .ok_or("Missing 'file' argument")?;
@@ -187,7 +187,7 @@ fn handle_tool_call(
                 .map_err(|_| "File contains non-UTF8 content".to_string())
         }
 
-        "ghostid_write" => {
+        "ghostit_write" => {
             let file = args.get("file")
                 .and_then(|v| v.as_str())
                 .ok_or("Missing 'file' argument")?;
@@ -198,7 +198,7 @@ fn handle_tool_call(
             Ok(format!("Written: {}", file))
         }
 
-        "ghostid_remove" => {
+        "ghostit_remove" => {
             let file = args.get("file")
                 .and_then(|v| v.as_str())
                 .ok_or("Missing 'file' argument")?;
