@@ -19,8 +19,7 @@ GhostIT is also an encryption protocol. AI coding assistants like Claude Code ca
 **Homebrew (macOS / Linux):**
 
 ```
-brew tap neuromance-admin/tap
-brew install ghostit
+brew install neuromance-admin/tap/ghostit
 ```
 
 **Manual download:**
@@ -37,9 +36,10 @@ sudo mv ghostit /usr/local/bin/
 ```
 git clone https://github.com/neuromance-admin/ghostit.git
 cd ghostit
-cargo build --release
-sudo ln -sf target/release/ghostit /usr/local/bin/ghostit
+cargo install --path .
 ```
+
+`cargo install` copies the binary to `~/.cargo/bin/`, which is already on your PATH if you've installed Rust via `rustup`. Don't symlink from the cargo target directory — if you later move or clean the repo, the symlink will break.
 
 Verify: `ghostit --version`
 
@@ -392,10 +392,16 @@ brew uninstall ghostit
 brew untap neuromance-admin/tap
 ```
 
-**Manual / build from source:**
+**Built from source (via `cargo install`):**
 
 ```
-rm /usr/local/bin/ghostit
+cargo uninstall ghostit
+```
+
+**Manual binary install (if you copied to `/usr/local/bin`):**
+
+```
+sudo rm /usr/local/bin/ghostit
 ```
 
 No config files, no daemon, no account — just the binary. Your encrypted folders remain intact but will need GhostIT (or a compatible decryptor) to unlock.
