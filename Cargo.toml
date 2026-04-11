@@ -1,6 +1,6 @@
 [package]
 name = "ghostit"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Encrypt any folder on your drive. No account. No server. Your key, your data."
 license = "Apache-2.0"
